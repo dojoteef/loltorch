@@ -1,0 +1,15 @@
+#!/bin/bash
+declare -a regions=('oce' 'eune' 'br' 'euw' 'kr' 'lan' 'las' 'na' 'tr' 'ru')
+for region in "${regions[@]}"
+do
+    mkdir -p "matches/""${region}"
+    th getmatches.lua -region "${region}" -outdir matches -tier challenger &
+done
+
+for job in `jobs -p`
+do
+    wait $job
+done
+
+
+trap 'kill $(jobs -p)' EXIT
