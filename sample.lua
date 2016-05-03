@@ -26,6 +26,7 @@ end
 print('loading model from '..params.model)
 assert(path.exists(params.model), 'Cannot find the model')
 local model = torch.load(params.model)
+model:evaluate()
 
 local dataLoader = dataset.Loader(params.datadir, 8, 1, 1)
 local role = dataLoader:getRoleIndex(params.role)

@@ -244,6 +244,7 @@ if not ok then
     os.exit()
 end
 
+model:evaluate()
 torch.save(params.model, model)
 
 ok, errmsg = xpcall(evaluateModel, errorHandler(model), model, dataTest, criterion)
