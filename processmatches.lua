@@ -4,13 +4,13 @@ local dir = require('pl.dir')
 local file = require('pl.file')
 local path = require('pl.path')
 local torch = require('torch')
+local tablex = require('pl.tablex')
 
 local cmd = torch.CmdLine()
 cmd:text()
 cmd:text('Get matches from the League of Legends API')
 cmd:text()
 cmd:text('Options')
-cmd:option('-version','6.7','what patch version to target')
 cmd:option('-matchdir','matches','the directory where the matches are located')
 cmd:option('-datadir','dataset','the directory where to store the serialized dataset')
 cmd:option('-randomize',false,'whether to randomize or used sorted order for classification index')
@@ -36,11 +36,9 @@ local function addSpells(mapping, participant, target, tmp, offset)
 end
 
 local function addItems(mapping, stats, target, tmp, offset)
-    if stats then
-        for i=0, dataset.maxItemCount-1 do
-            local itemId = stats['item'..i]
-            table.insert(tmp, itemId and mapping.items[itemId] or nullId)
-        end
+    for i=0, dataset.maxItemCount-1 do
+        local itemId = stats['item'..i]
+        table.insert(tmp, itemId and mapping.items[itemId] or nullId)
     end
 
     while #tmp < dataset.maxItemCount do
@@ -123,7 +121,11 @@ local function getLane(lane)
     end
 end
 
-local function matchesToTensor(version, matchdir, datadir)
+local function validParticipant(participant)
+    return participant.stats ~= nil
+end
+
+local function matchesToTensor(matchdir, datadir)
     local timer = torch.Timer()
 
     print('timer: ', timer:time().real)
@@ -133,6 +135,10 @@ local function matchesToTensor(version, matchdir, datadir)
             lanes={},
             roles={},
             champions={},
+            versions={},
+            outcomes={WIN=true,LOSS=true},
+            regions={},
+            tiers={}
         },
         targets={
             runes={},
@@ -158,22 +164,19 @@ local function matchesToTensor(version, matchdir, datadir)
         else
             local data = file.read(filename)
             local ok,match = pcall(function() return cjson.decode(data) end)
-            if ok and string.find(match.matchVersion, version) then
-                local winningTeamId
-                for _,team in ipairs(match.teams) do
-                    if team.winner then
-                        winningTeamId = team.teamId
-                    end
-                end
+            if ok then
+                unordered.inputs.regions[match.region] = true
+                unordered.inputs.versions[match.matchVersion] = true
 
                 for _,participant in ipairs(match.participants) do
-                    if participant.teamId == winningTeamId then
-                        participantCount = participantCount + 1
-                    end
+                    participantCount = participantCount + 1
 
                     unordered.inputs.roles[participant.timeline.role] = true
                     unordered.inputs.champions[participant.championId] = true
                     unordered.inputs.lanes[getLane(participant.timeline.lane)] = true
+                    if participant.highestAchievedSeasonTier then
+                        unordered.inputs.tiers[participant.highestAchievedSeasonTier] = true
+                    end
 
                     if participant.spell1Id and participant.spell1Id > 0 then
                         unordered.targets.spells[participant.spell1Id] = true
@@ -233,6 +236,9 @@ local function matchesToTensor(version, matchdir, datadir)
         end
     end
 
+    local inputLen = tablex.size(ordered.inputs)
+    local targetlen = dataset.maxSpellCount + dataset.maxItemCount + dataset.maxRuneCount + dataset.maxMasteryCount
+
     local mapping = {}
     for datatype, tables in pairs(ordered) do
         local indices
@@ -261,10 +267,7 @@ local function matchesToTensor(version, matchdir, datadir)
 
     print('timer: ', timer:time().real)
     print('loading matches...')
-    local targetlen = dataset.maxSpellCount + dataset.maxItemCount + dataset.maxRuneCount + dataset.maxMasteryCount
     local targets = tensorType(mapping.targets.byteLength)(participantCount, targetlen)
-
-    local inputLen = 3 -- tuple of (champion, role, lane)
     local inputs = tensorType(mapping.inputs.byteLength)(participantCount, inputLen)
 
     local tmp = {}
@@ -272,16 +275,9 @@ local function matchesToTensor(version, matchdir, datadir)
     for _,matchFile in pairs(dir.getallfiles(matchdir, '*.json')) do
         local data = file.read(matchFile)
         local ok,match = pcall(function() return cjson.decode(data) end)
-        if ok and string.find(match.matchVersion, version) then
-            local winningTeamId
-            for _,team in ipairs(match.teams) do
-                if team.winner then
-                    winningTeamId = team.teamId
-                end
-            end
-
+        if ok then
             for _,participant in ipairs(match.participants) do
-                if participant.teamId == winningTeamId then
+                if validParticipant(participant) then
                     local input = inputs[dataIndex]
                     local target = targets[dataIndex]
                     dataIndex = dataIndex + 1
@@ -289,6 +285,10 @@ local function matchesToTensor(version, matchdir, datadir)
                     input[1] = mapping.inputs.roles[participant.timeline.role]
                     input[2] = mapping.inputs.champions[participant.championId]
                     input[3] = mapping.inputs.lanes[getLane(participant.timeline.lane)]
+                    input[4] = mapping.inputs.outcomes[participant.stats.winner and 'WIN' or 'LOSS']
+                    input[5] = mapping.inputs.versions[match.matchVersion]
+                    input[6] = mapping.inputs.regions[match.region]
+                    input[7] = mapping.inputs.tiers[participant.highestAchievedSeasonTier or 'UNRANKED']
 
                     local offset = 0
                     offset = addSpells(mapping.targets, participant, target, tmp, offset)
@@ -309,4 +309,4 @@ local function matchesToTensor(version, matchdir, datadir)
     print('done in time (seconds): ', timer:time().real)
 end
 
-matchesToTensor(params.version, params.matchdir, params.datadir)
+matchesToTensor(params.matchdir, params.datadir)

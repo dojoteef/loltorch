@@ -4,6 +4,7 @@ local nngraph = require('nngraph')
 local optim = require('optim')
 local path = require('pl.path')
 local torch = require('torch')
+require('TemporalBatchNormalization')
 
 local cmd = torch.CmdLine()
 cmd:text()
@@ -33,7 +34,11 @@ local dataLoader = dataset.Loader(params.datadir, 8, 1, 1)
 local dataTrain, dataValidate, dataTest = dataLoader:load(params.batchsize)
 
 local function getResnetModel()
-    local function addResidualLayer(input, outputFrameSize, stride)
+    local function calcluateOutputFeatures(inputFrames, window, stride)
+        return (inputFrames - window) / stride + 1
+    end
+
+    local function addResidualLayer(input, features, outputFrameSize, stride)
         local inputFrameSize
         local findConvolutions = function(node)
             -- when doing dfs, last convolution will be the most recently added
@@ -47,37 +52,53 @@ local function getResnetModel()
         assert(inputFrameSize, 'Could not find outputFrameSize from previous TemporalConvolution module')
 
         stride = stride or 1
+        features = calcluateOutputFeatures(features, 1, stride)
+
         local layer = nn.TemporalConvolution(inputFrameSize, outputFrameSize, 1, stride)(input)
-        layer = nn.BatchNormalization(outputFrameSize)(layer)
+        layer = nn.TemporalBatchNormalization(features)(layer)
         layer = nn.ReLU(true)(layer)
-        layer = nn.TemporalConvolution(outputFrameSize, outputFrameSize, 1, stride)(layer)
-        layer = nn.BatchNormalization(outputFrameSize)(layer)
+        layer = nn.TemporalConvolution(outputFrameSize, outputFrameSize, 1, 1)(layer)
+        layer = nn.TemporalBatchNormalization(features)(layer)
 
         local shortcut = input
+        if stride > 1 then
+            shortcut = nn.TemporalMaxPooling(1, stride)(shortcut)
+        end
         if outputFrameSize > inputFrameSize then
-            shortcut = nn.Padding(1, outputFrameSize - inputFrameSize, 3)(shortcut)
-        elseif outputFrameSize < inputFrameSize then
-            error('outputFrameSize < inputFrameSize is unsupported!')
+            shortcut = nn.Padding(2, outputFrameSize - inputFrameSize, 2)(shortcut)
         end
 
         layer = nn.CAddTable()({layer, shortcut})
         layer = nn.ReLU(true)(layer)
 
-        return layer
+        return layer, features
     end
 
-    local input = nn.Identity()()
-
     local inputSize = dataLoader.mappings.inputs.size
-    local model = nn.TemporalConvolution(inputSize, 10, 2)(input)
-    model = nn.TemporalMaxPooling(2)(model)
-    model = nn.Squeeze(2)(model)
-    model = nn.BatchNormalization(10)(model)
+    local inputCount = dataTrain.inputs:size(2)
+    local targetCount = dataTrain.targets:size(2)
+    local embeddingSize = 3
+
+    local input = nn.Identity()()
+    local model = nn.LookupTable(inputSize, embeddingSize)(input)
+    model = nn.TemporalConvolution(embeddingSize, 16, 1, 2)(model)
+
+    local features = calcluateOutputFeatures(inputCount, 1, 2)
+    model = nn.TemporalBatchNormalization(features)(model)
     model = nn.ReLU(true)(model)
 
-    for i=1,params.depth do model = addResidualLayer(model, i*10) end
+    for _=1,params.depth do model, features = addResidualLayer(model, features, 16) end
 
-    model = nn.Linear(params.depth*10, dataTrain.targets:size(2))(model)
+    model, features = addResidualLayer(model, features, 32, 16, 2)
+    for _=1,params.depth-1 do model, features = addResidualLayer(model, features, 32) end
+
+    model, features = addResidualLayer(model, features, 64, 32, 2)
+    for _=1,params.depth-1 do model, features = addResidualLayer(model, features, 64) end
+
+    local view = nn.View(64)
+    view:setNumInputDims(2)
+    model = view(model)
+    model = nn.Linear(64, targetCount)(model)
 
     model = nn.gModule({input}, {model})
     model.name = 'resnet'
@@ -87,7 +108,7 @@ end
 
 local function getMLPModel()
     local hidden = 100
-    local inputSize = dataTrain.inputs:size(2) * dataLoader.mappings.inputs.size
+    local inputSize = dataTrain.inputs:size(2)
     local targetSize = dataTrain.targets:size(2)
 
     local input = nn.Identity()()
@@ -121,15 +142,6 @@ local function getModel()
     return model, criterion
 end
 
-local function average(t)
-    local total = 0
-    for _,v in ipairs(t) do
-        total = total + v
-    end
-
-    return total/#t
-end
-
 local function evaluateModel(model, data, criterion)
     print('Evaluating...')
     model:evaluate()
@@ -142,7 +154,8 @@ local function evaluateModel(model, data, criterion)
         table.insert(losses, loss)
     end
 
-    local loss = average(losses)
+    losses = torch.Tensor(losses)
+    local loss = torch.sum(losses)/(torch.numel(losses)*data:targetScale())
     print('loss: '..loss)
 
     return math.abs(loss)
@@ -199,7 +212,9 @@ local function trainModel(model, criterion)
             table.insert(losses, batchLoss[1])
         end
 
-        print('training loss: '..average(losses))
+        losses = torch.Tensor(losses)
+        local loss = torch.sum(losses)/(torch.numel(losses)*dataTrain:targetScale())
+        print('training loss: '..loss)
         torch.save(params.snapshot, model)
 
         if evaluateModel(model, dataValidate, criterion) < params.threshold then

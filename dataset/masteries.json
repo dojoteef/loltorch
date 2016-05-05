@@ -1,97 +1,556 @@
 {
+   "tree": {
+      "Ferocity": [
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6111
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6114
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6121
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6122
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6123
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6131
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6134
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6141
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6142
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6151
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6154
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6161
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6162
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6164
+            }
+         ]}
+      ],
+      "Cunning": [
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6311
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6312
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6321
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6322
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6323
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6331
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6332
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6342
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6343
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6351
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6352
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6361
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6362
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6363
+            }
+         ]}
+      ],
+      "Resolve": [
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6211
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6212
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6221
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6223
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6231
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6232
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6241
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6242
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6251
+            },
+            null,
+            {
+               "prereq": "0",
+               "masteryId": 6252
+            }
+         ]},
+         {"masteryTreeItems": [
+            {
+               "prereq": "0",
+               "masteryId": 6261
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6262
+            },
+            {
+               "prereq": "0",
+               "masteryId": 6263
+            }
+         ]}
+      ]
+   },
    "data": {
       "6121": {
+         "ranks": 1,
          "id": 6121,
+         "sanitizedDescription": ["Melee: Deal 3% additional damage, take 1.5% additional damage. Ranged: Deal and take 2% additional damage"],
          "description": ["Melee: Deal 3% additional damage, take 1.5% additional damage.<br><br>Ranged: Deal and take 2% additional damage"],
-         "name": "Double Edged Sword"
+         "name": "Double Edged Sword",
+         "image": {
+            "w": 48,
+            "full": "6121.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 240
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6122": {
+         "ranks": 1,
          "id": 6122,
-         "description": ["Killing a unit restores 20 Health (30 second cooldown)"],
-         "name": "Feast"
+         "sanitizedDescription": ["Killing a unit restores 20 Health (25 second cooldown)"],
+         "description": ["Killing a unit restores 20 Health (25 second cooldown)"],
+         "name": "Feast",
+         "image": {
+            "w": 48,
+            "full": "6122.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 288
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6261": {
+         "ranks": 1,
          "id": 6261,
-         "description": ["Every 4 seconds in combat, your next attack against an enemy champion steals life equal to 2.5% of your max Health (halved for ranged champions, deals magic damage)"],
-         "name": "Grasp of the Undying"
+         "sanitizedDescription": ["Every 4 seconds in combat your next attack against an enemy champion steals life equal to 3% of your max Health (halved for ranged champions, deals magic damage)"],
+         "description": ["Every 4 seconds in combat your next attack against an enemy champion steals life equal to 3% of your max Health (halved for ranged champions, deals magic damage)"],
+         "name": "Grasp of the Undying",
+         "image": {
+            "w": 48,
+            "full": "6261.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 336
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6123": {
+         "ranks": 1,
          "id": 6123,
+         "sanitizedDescription": ["Damaging enemy champions causes them to take 3% more damage from your allies"],
          "description": ["Damaging enemy champions causes them to take 3% more damage from your allies"],
-         "name": "Expose Weakness"
+         "name": "Expose Weakness",
+         "image": {
+            "w": 48,
+            "full": "6123.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 432,
+            "x": 336
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6141": {
+         "ranks": 1,
          "id": 6141,
+         "sanitizedDescription": ["Deal 1% increased damage for each unique enemy champion you have killed"],
          "description": ["Deal 1% increased damage for each unique enemy champion you have killed"],
-         "name": "Bounty Hunter"
+         "name": "Bounty Hunter",
+         "image": {
+            "w": 48,
+            "full": "6141.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 432
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6142": {
+         "ranks": 1,
          "id": 6142,
+         "sanitizedDescription": ["Deal 2.5% increased damage to targets with impaired movement (slow, stun, root, taunt, etc.)"],
          "description": ["Deal 2.5% increased damage to targets with impaired movement (slow, stun, root, taunt, etc.)"],
-         "name": "Oppressor"
+         "name": "Oppressor",
+         "image": {
+            "w": 48,
+            "full": "6142.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 432,
+            "x": 0
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6162": {
+         "ranks": 1,
          "id": 6162,
-         "description": ["You generate stacks of Fervor by hitting enemy champions with attacks and abilities. Your basic attacks deal 1-14 bonus physical damage (based on your level) to enemy champions for each of your stacks of Fervor (max 8 stacks).<br><br>Damaging enemy champions with an attack generates 1 stack of Fervor (2 for melee champions) and damaging enemy champions with an ability generates 2 stacks of Fervor (2 second cooldown). Stacks of Fervor last 6 seconds."],
-         "name": "Fervor of Battle"
+         "sanitizedDescription": ["You generate stacks of Fervor by hitting enemy champions with attacks and abilities. Your basic attacks deal 1-14 bonus physical damage (based on your level) to enemy champions for each of your stacks of Fervor (max 8 stacks). Attacking enemy champions generates 1 stack of Fervor (2 for melee champions) and damaging enemy champions with an ability generates 2 stacks of Fervor (2 second cooldown). Stacks of Fervor last 6 seconds."],
+         "description": ["You generate stacks of Fervor by hitting enemy champions with attacks and abilities. Your basic attacks deal 1-14 bonus physical damage (based on your level) to enemy champions for each of your stacks of Fervor (max 8 stacks).<br><br>Attacking enemy champions generates 1 stack of Fervor (2 for melee champions) and damaging enemy champions with an ability generates 2 stacks of Fervor (2 second cooldown). Stacks of Fervor last 6 seconds."],
+         "name": "Fervor of Battle",
+         "image": {
+            "w": 48,
+            "full": "6162.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 432,
+            "x": 192
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6161": {
+         "ranks": 1,
          "id": 6161,
+         "sanitizedDescription": ["Gain increasingly more Life Steal based on your missing health against champions (up to 20%). Against minions gain 50% benefit (25% for ranged champions)."],
          "description": ["Gain increasingly more Life Steal based on your missing health against champions (up to 20%). Against minions gain 50% benefit (25% for ranged champions)."],
-         "name": "Warlord's Bloodlust"
+         "name": "Warlord's Bloodlust",
+         "image": {
+            "w": 48,
+            "full": "6161.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 432,
+            "x": 144
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6164": {
+         "ranks": 1,
          "id": 6164,
+         "sanitizedDescription": ["Your damaging abilities cause enemy champions to take additional magic damage equal to 8 + 60% of your Bonus Attack Damage and 25% of your Ability Power, over 4 seconds. Deathfire Touch has reduced effectiveness when applied by area of effect and damage over time abilities. - Area of Effect: 2 second duration. - Damage over time: 1 second duration."],
          "description": ["Your damaging abilities cause enemy champions to take additional magic damage equal to 8 + 60% of your Bonus Attack Damage and 25% of your Ability Power, over 4 seconds. <br><br>Deathfire Touch has reduced effectiveness when applied by area of effect and damage over time abilities.<br>     - Area of Effect: 2 second duration. <br>     - Damage over time: 1 second duration."],
-         "name": "Deathfire Touch"
+         "name": "Deathfire Touch",
+         "image": {
+            "w": 48,
+            "full": "6164.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 432,
+            "x": 240
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6323": {
+         "ranks": 1,
          "id": 6323,
+         "sanitizedDescription": ["Deal 2% increased damage to champions when no allied champions are nearby"],
          "description": ["Deal 2% increased damage to champions when no allied champions are nearby"],
-         "name": "Assassin"
+         "name": "Assassin",
+         "image": {
+            "w": 48,
+            "full": "6323.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 432,
+            "x": 288
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6342": {
+         "ranks": 1,
          "id": 6342,
+         "sanitizedDescription": ["Gain 1 gold for each nearby minion killed by an ally. Gain 3 gold (10 if melee) when hitting an enemy champion with a basic attack (5 second cooldown)"],
          "description": ["Gain 1 gold for each nearby minion killed by an ally. <br><br>Gain 3 gold (10 if melee) when hitting an enemy champion with a basic attack (5 second cooldown)"],
-         "name": "Bandit"
+         "name": "Bandit",
+         "image": {
+            "w": 48,
+            "full": "6342.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 288
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6241": {
+         "ranks": 1,
          "id": 6241,
+         "sanitizedDescription": ["Reduces the cooldown of Summoner Spells by 15%"],
          "description": ["Reduces the cooldown of Summoner Spells by 15%"],
-         "name": "Insight"
+         "name": "Insight",
+         "image": {
+            "w": 48,
+            "full": "6241.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 144
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6242": {
+         "ranks": 1,
          "id": 6242,
+         "sanitizedDescription": ["+50% Base Health Regen, increased to +200% when below 25% Health"],
          "description": ["+50% Base Health Regen, increased to +200% when below 25% Health"],
-         "name": "Perseverance"
+         "name": "Perseverance",
+         "image": {
+            "w": 48,
+            "full": "6242.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 192
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6321": {
+         "ranks": 1,
          "id": 6321,
+         "sanitizedDescription": ["Buffs from neutral monsters last 15% longer"],
          "description": ["Buffs from neutral monsters last 15% longer"],
-         "name": "Runic Affinity"
+         "name": "Runic Affinity",
+         "image": {
+            "w": 48,
+            "full": "6321.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 96
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6322": {
+         "ranks": 1,
          "id": 6322,
-         "description": ["Your Potions and Elixirs last 10% longer.<br><br>Your Health Potions are replaced with Biscuits that restore 15 Health and Mana instantly on use"],
-         "name": "Secret Stash"
+         "sanitizedDescription": ["Your Potions and Elixirs last 10% longer. Your Health Potions are replaced with Biscuits that restore 20 Health and 10 Mana instantly on use"],
+         "description": ["Your Potions and Elixirs last 10% longer.<br><br>Your Health Potions are replaced with Biscuits that restore 20 Health and 10 Mana instantly on use"],
+         "name": "Secret Stash",
+         "image": {
+            "w": 48,
+            "full": "6322.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 144
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6262": {
+         "ranks": 1,
          "id": 6262,
+         "sanitizedDescription": ["Siege minions and large monsters that you or nearby allied champions kill grant 20 and 10 permanent Health, respectively (300 max). After reaching the max bonus, these kills instead restore 6% of your Maximum Health."],
          "description": ["Siege minions and large monsters that you or nearby allied champions kill grant 20 and 10 permanent Health, respectively (300 max). After reaching the max bonus, these kills instead restore 6% of your Maximum Health."],
-         "name": "Strength of the Ages"
+         "name": "Strength of the Ages",
+         "image": {
+            "w": 48,
+            "full": "6262.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 384
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6263": {
+         "ranks": 1,
          "id": 6263,
+         "sanitizedDescription": ["+4% Damage Reduction. 6% of the damage from enemy champions taken by the nearest allied champion is dealt to you instead. Damage is not redirected if you are below 5% of your maximum health."],
          "description": ["+4% Damage Reduction. 6% of the damage from enemy champions taken by the nearest allied champion is dealt to you instead. Damage is not redirected if you are below 5% of your maximum health."],
-         "name": "Bond of Stone"
+         "name": "Bond of Stone",
+         "image": {
+            "w": 48,
+            "full": "6263.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 432
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6343": {
+         "ranks": 1,
          "id": 6343,
+         "sanitizedDescription": ["Champion kills and assists restore 5% of your missing Health and Mana"],
          "description": ["Champion kills and assists restore 5% of your missing Health and Mana"],
-         "name": "Dangerous Game"
+         "name": "Dangerous Game",
+         "image": {
+            "w": 48,
+            "full": "6343.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 336
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6352": {
+         "ranks": 5,
          "id": 6352,
+         "sanitizedDescription": [
+            "Your Cooldown Reduction cap is increased to 41% and you gain 1% Cooldown Reduction",
+            "Your Cooldown Reduction cap is increased to 42% and you gain 2% Cooldown Reduction",
+            "Your Cooldown Reduction cap is increased to 43% and you gain 3% Cooldown Reduction",
+            "Your Cooldown Reduction cap is increased to 44% and you gain 4% Cooldown Reduction",
+            "Your Cooldown Reduction cap is increased to 45% and you gain 5% Cooldown Reduction"
+         ],
          "description": [
             "Your Cooldown Reduction cap is increased to 41% and you gain 1% Cooldown Reduction",
             "Your Cooldown Reduction cap is increased to 42% and you gain 2% Cooldown Reduction",
@@ -99,10 +558,29 @@
             "Your Cooldown Reduction cap is increased to 44% and you gain 4% Cooldown Reduction",
             "Your Cooldown Reduction cap is increased to 45% and you gain 5% Cooldown Reduction"
          ],
-         "name": "Intelligence"
+         "name": "Intelligence",
+         "image": {
+            "w": 48,
+            "full": "6352.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 432
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6351": {
+         "ranks": 5,
          "id": 6351,
+         "sanitizedDescription": [
+            "Gain 0.6 + 0.06 per level Magic Penetration and Armor Penetration",
+            "Gain 1.2 + 0.12 per level Magic Penetration and Armor Penetration",
+            "Gain 1.8 + 0.18 per level Magic Penetration and Armor Penetration",
+            "Gain 2.4 + 0.24 per level Magic Penetration and Armor Penetration",
+            "Gain 3 + 0.3 per level Magic Penetration and Armor Penetration"
+         ],
          "description": [
             "Gain 0.6 + 0.06 per level Magic Penetration and Armor Penetration",
             "Gain 1.2 + 0.12 per level Magic Penetration and Armor Penetration",
@@ -110,10 +588,29 @@
             "Gain 2.4 + 0.24 per level Magic Penetration and Armor Penetration",
             "Gain 3 + 0.3 per level Magic Penetration and Armor Penetration"
          ],
-         "name": "Precision"
+         "name": "Precision",
+         "image": {
+            "w": 48,
+            "full": "6351.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 384
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6212": {
+         "ranks": 5,
          "id": 6212,
+         "sanitizedDescription": [
+            "+1% Bonus Armor and Magic Resist",
+            "+2% Bonus Armor and Magic Resist",
+            "+3% Bonus Armor and Magic Resist",
+            "+4% Bonus Armor and Magic Resist",
+            "+5% Bonus Armor and Magic Resist"
+         ],
          "description": [
             "+1% Bonus Armor and Magic Resist",
             "+2% Bonus Armor and Magic Resist",
@@ -121,10 +618,29 @@
             "+4% Bonus Armor and Magic Resist",
             "+5% Bonus Armor and Magic Resist"
          ],
-         "name": "Unyielding"
+         "name": "Unyielding",
+         "image": {
+            "w": 48,
+            "full": "6212.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 240,
+            "x": 384
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6211": {
+         "ranks": 5,
          "id": 6211,
+         "sanitizedDescription": [
+            "+0.4 Health per 5 seconds",
+            "+0.8 Health per 5 seconds",
+            "+1.2 Health per 5 seconds",
+            "+1.6 Health per 5 seconds",
+            "+2.0 Health per 5 seconds"
+         ],
          "description": [
             "+0.4 Health per 5 seconds",
             "+0.8 Health per 5 seconds",
@@ -132,10 +648,29 @@
             "+1.6 Health per 5 seconds",
             "+2.0 Health per 5 seconds"
          ],
-         "name": "Recovery"
+         "name": "Recovery",
+         "image": {
+            "w": 48,
+            "full": "6211.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 240,
+            "x": 336
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6111": {
+         "ranks": 5,
          "id": 6111,
+         "sanitizedDescription": [
+            "+0.8% Attack Speed",
+            "+1.6% Attack Speed",
+            "+2.4% Attack Speed",
+            "+3.2% Attack Speed",
+            "+4% Attack Speed"
+         ],
          "description": [
             "+0.8% Attack Speed",
             "+1.6% Attack Speed",
@@ -143,10 +678,29 @@
             "+3.2% Attack Speed",
             "+4% Attack Speed"
          ],
-         "name": "Fury"
+         "name": "Fury",
+         "image": {
+            "w": 48,
+            "full": "6111.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 144
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6134": {
+         "ranks": 5,
          "id": 6134,
+         "sanitizedDescription": [
+            "+2 Attack Damage and 3 Ability Power at level 18 (0.11 Attack Damage and 0.16 Ability Power per level)",
+            "+4 Attack Damage and 6 Ability Power at level 18 (0.22 Attack Damage and 0.32 Ability Power per level)",
+            "+6 Attack Damage and 9 Ability Power at level 18 (0.33 Attack Damage and 0.5 Ability Power per level)",
+            "+8 Attack Damage and 12 Ability Power at level 18 (0.44 Attack Damage and 0.66 Ability Power per level)",
+            "+10 Attack Damage and 15 Ability Power at level 18 (0.55 Attack Damage and 0.83 Ability Power per level)"
+         ],
          "description": [
             "+2 Attack Damage and 3 Ability Power at level 18 (0.11 Attack Damage and 0.16 Ability Power per level)",
             "+4 Attack Damage and 6 Ability Power at level 18 (0.22 Attack Damage and 0.32 Ability Power per level)",
@@ -154,10 +708,29 @@
             "+8 Attack Damage and 12 Ability Power at level 18 (0.44 Attack Damage and 0.66 Ability Power per level)",
             "+10 Attack Damage and 15 Ability Power at level 18 (0.55 Attack Damage and 0.83 Ability Power per level)"
          ],
-         "name": "Natural Talent"
+         "name": "Natural Talent",
+         "image": {
+            "w": 48,
+            "full": "6134.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 384
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6114": {
+         "ranks": 5,
          "id": 6114,
+         "sanitizedDescription": [
+            "+0.4% increased Ability damage",
+            "+0.8% increased Ability damage",
+            "+1.2% increased Ability damage",
+            "+1.6% increased Ability damage",
+            "+2.0% increased Ability damage"
+         ],
          "description": [
             "+0.4% increased Ability damage",
             "+0.8% increased Ability damage",
@@ -165,10 +738,29 @@
             "+1.6% increased Ability damage",
             "+2.0% increased Ability damage"
          ],
-         "name": "Sorcery"
+         "name": "Sorcery",
+         "image": {
+            "w": 48,
+            "full": "6114.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 192
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6151": {
+         "ranks": 5,
          "id": 6151,
+         "sanitizedDescription": [
+            "+1.4% Armor Penetration",
+            "+2.8% Armor Penetration",
+            "+4.2% Armor Penetration",
+            "+5.6% Armor Penetration",
+            "+7% Armor Penetration"
+         ],
          "description": [
             "+1.4% Armor Penetration",
             "+2.8% Armor Penetration",
@@ -176,10 +768,29 @@
             "+5.6% Armor Penetration",
             "+7% Armor Penetration"
          ],
-         "name": "Battering Blows"
+         "name": "Battering Blows",
+         "image": {
+            "w": 48,
+            "full": "6151.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 432,
+            "x": 48
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6131": {
+         "ranks": 5,
          "id": 6131,
+         "sanitizedDescription": [
+            "+0.4% Lifesteal and Spell Vamp",
+            "+0.8% Lifesteal and Spell Vamp",
+            "+1.2% Lifesteal and Spell Vamp",
+            "+1.6% Lifesteal and Spell Vamp",
+            "+2.0% Lifesteal and Spell Vamp"
+         ],
          "description": [
             "+0.4% Lifesteal and Spell Vamp",
             "+0.8% Lifesteal and Spell Vamp",
@@ -187,10 +798,29 @@
             "+1.6% Lifesteal and Spell Vamp",
             "+2.0% Lifesteal and Spell Vamp"
          ],
-         "name": "Vampirism"
+         "name": "Vampirism",
+         "image": {
+            "w": 48,
+            "full": "6131.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 336
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6231": {
+         "ranks": 5,
          "id": 6231,
+         "sanitizedDescription": [
+            "Shields, healing, regeneration, and lifesteal on you are 1.6% stronger",
+            "Shields, healing, regeneration, and lifesteal on you are 3.2% stronger",
+            "Shields, healing, regeneration, and lifesteal on you are 4.8% stronger",
+            "Shields, healing, regeneration, and lifesteal on you are 6.4% stronger",
+            "Shields, healing, regeneration, and lifesteal on you are 8% stronger"
+         ],
          "description": [
             "Shields, healing, regeneration, and lifesteal on you are 1.6% stronger",
             "Shields, healing, regeneration, and lifesteal on you are 3.2% stronger",
@@ -198,10 +828,29 @@
             "Shields, healing, regeneration, and lifesteal on you are 6.4% stronger",
             "Shields, healing, regeneration, and lifesteal on you are 8% stronger"
          ],
-         "name": "Runic Armor"
+         "name": "Runic Armor",
+         "image": {
+            "w": 48,
+            "full": "6231.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 48
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6154": {
+         "ranks": 5,
          "id": 6154,
+         "sanitizedDescription": [
+            "+1.4% Magic Penetration",
+            "+2.8% Magic Penetration",
+            "+4.2% Magic Penetration",
+            "+5.6% Magic Penetration",
+            "+7% Magic Penetration"
+         ],
          "description": [
             "+1.4% Magic Penetration",
             "+2.8% Magic Penetration",
@@ -209,10 +858,29 @@
             "+5.6% Magic Penetration",
             "+7% Magic Penetration"
          ],
-         "name": "Piercing Thoughts"
+         "name": "Piercing Thoughts",
+         "image": {
+            "w": 48,
+            "full": "6154.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 432,
+            "x": 96
+         },
+         "prereq": "0",
+         "masteryTree": "Ferocity"
       },
       "6311": {
+         "ranks": 5,
          "id": 6311,
+         "sanitizedDescription": [
+            "+0.6% Movement Speed out of combat",
+            "+1.2% Movement Speed out of combat",
+            "+1.8% Movement Speed out of combat",
+            "+2.4% Movement Speed out of combat",
+            "+3% Movement Speed out of combat"
+         ],
          "description": [
             "+0.6% Movement Speed out of combat",
             "+1.2% Movement Speed out of combat",
@@ -220,10 +888,29 @@
             "+2.4% Movement Speed out of combat",
             "+3% Movement Speed out of combat"
          ],
-         "name": "Wanderer"
+         "name": "Wanderer",
+         "image": {
+            "w": 48,
+            "full": "6311.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 0
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6232": {
+         "ranks": 5,
          "id": 6232,
+         "sanitizedDescription": [
+            "+9 Health",
+            "+18 Health",
+            "+27 Health",
+            "+36 Health",
+            "+45 Health"
+         ],
          "description": [
             "+9 Health",
             "+18 Health",
@@ -231,10 +918,29 @@
             "+36 Health",
             "+45 Health"
          ],
-         "name": "Veteran's Scars"
+         "name": "Veteran's Scars",
+         "image": {
+            "w": 48,
+            "full": "6232.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 96
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6312": {
+         "ranks": 5,
          "id": 6312,
+         "sanitizedDescription": [
+            "Single target attacks and spells deal 1 bonus damage to minions and monsters",
+            "Single target attacks and spells deal 2 bonus damage to minions and monsters",
+            "Single target attacks and spells deal 3 bonus damage to minions and monsters",
+            "Single target attacks and spells deal 4 bonus damage to minions and monsters",
+            "Single target attacks and spells deal 5 bonus damage to minions and monsters"
+         ],
          "description": [
             "Single target attacks and spells deal 1 bonus damage to minions and monsters",
             "Single target attacks and spells deal 2 bonus damage to minions and monsters",
@@ -242,10 +948,29 @@
             "Single target attacks and spells deal 4 bonus damage to minions and monsters",
             "Single target attacks and spells deal 5 bonus damage to minions and monsters"
          ],
-         "name": "Savagery"
+         "name": "Savagery",
+         "image": {
+            "w": 48,
+            "full": "6312.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 48
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6331": {
+         "ranks": 5,
          "id": 6331,
+         "sanitizedDescription": [
+            "Deal 1% increased damage to champions below 40% Health",
+            "Deal 2% increased damage to champions below 40% Health",
+            "Deal 3% increased damage to champions below 40% Health",
+            "Deal 4% increased damage to champions below 40% Health",
+            "Deal 5% increased damage to champions below 40% Health"
+         ],
          "description": [
             "Deal 1% increased damage to champions below 40% Health",
             "Deal 2% increased damage to champions below 40% Health",
@@ -253,10 +978,29 @@
             "Deal 4% increased damage to champions below 40% Health",
             "Deal 5% increased damage to champions below 40% Health"
          ],
-         "name": "Merciless"
+         "name": "Merciless",
+         "image": {
+            "w": 48,
+            "full": "6331.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 192
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6332": {
+         "ranks": 5,
          "id": 6332,
+         "sanitizedDescription": [
+            "Regenerate 0.3% of your missing Mana every 5 seconds",
+            "Regenerate 0.6% of your missing Mana every 5 seconds",
+            "Regenerate 0.9% of your missing Mana every 5 seconds",
+            "Regenerate 1.2% of your missing Mana every 5 seconds",
+            "Regenerate 1.5% of your missing Mana every 5 seconds"
+         ],
          "description": [
             "Regenerate 0.3% of your missing Mana every 5 seconds",
             "Regenerate 0.6% of your missing Mana every 5 seconds",
@@ -264,10 +1008,29 @@
             "Regenerate 1.2% of your missing Mana every 5 seconds",
             "Regenerate 1.5% of your missing Mana every 5 seconds"
          ],
-         "name": "Meditation"
+         "name": "Meditation",
+         "image": {
+            "w": 48,
+            "full": "6332.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 336,
+            "x": 240
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6251": {
+         "ranks": 5,
          "id": 6251,
+         "sanitizedDescription": [
+            "+3% Tenacity and Slow Resist",
+            "+6% Tenacity and Slow Resist",
+            "+9% Tenacity and Slow Resist",
+            "+12% Tenacity and Slow Resist",
+            "+15% Tenacity and Slow Resist"
+         ],
          "description": [
             "+3% Tenacity and Slow Resist",
             "+6% Tenacity and Slow Resist",
@@ -275,10 +1038,29 @@
             "+12% Tenacity and Slow Resist",
             "+15% Tenacity and Slow Resist"
          ],
-         "name": "Swiftness"
+         "name": "Swiftness",
+         "image": {
+            "w": 48,
+            "full": "6251.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 240
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6252": {
+         "ranks": 5,
          "id": 6252,
+         "sanitizedDescription": [
+            "+0.6 Armor and Magic Resist for each nearby enemy champion",
+            "+1.2 Armor and Magic Resist for each nearby enemy champion",
+            "+1.8 Armor and Magic Resist for each nearby enemy champion",
+            "+2.4 Armor and Magic Resist for each nearby enemy champion",
+            "+3 Armor and Magic Resist for each nearby enemy champion"
+         ],
          "description": [
             "+0.6 Armor and Magic Resist for each nearby enemy champion",
             "+1.2 Armor and Magic Resist for each nearby enemy champion",
@@ -286,34 +1068,110 @@
             "+2.4 Armor and Magic Resist for each nearby enemy champion",
             "+3 Armor and Magic Resist for each nearby enemy champion"
          ],
-         "name": "Legendary Guardian"
+         "name": "Legendary Guardian",
+         "image": {
+            "w": 48,
+            "full": "6252.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 288
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6362": {
+         "ranks": 1,
          "id": 6362,
+         "sanitizedDescription": ["Your 3rd attack or damaging spell against the same enemy champion calls down a lightning strike, dealing magic damage in the area. Damage: 10 per level, plus 30% of your Bonus Attack Damage, and 10% of your Ability Power (25-15 second cooldown, based on level)."],
          "description": ["Your 3rd attack or damaging spell against the same enemy champion calls down a lightning strike, dealing magic damage in the area. <br><br>Damage: 10 per level, plus 30% of your Bonus Attack Damage, and 10% of your Ability Power (25-15 second cooldown, based on level)."],
-         "name": "Thunderlord's Decree"
+         "name": "Thunderlord's Decree",
+         "image": {
+            "w": 48,
+            "full": "6362.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 48
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6221": {
+         "ranks": 1,
          "id": 6221,
+         "sanitizedDescription": ["+15 Movement Speed in Brush and River"],
          "description": ["+15 Movement Speed in Brush and River"],
-         "name": "Explorer"
+         "name": "Explorer",
+         "image": {
+            "w": 48,
+            "full": "6221.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 240,
+            "x": 432
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       },
       "6361": {
+         "ranks": 1,
          "id": 6361,
+         "sanitizedDescription": ["Dealing 30% of a champion's max Health within 2.5 seconds grants you 40% Movement Speed and 75% Slow Resistance for 3 seconds (10 second cooldown)."],
          "description": ["Dealing 30% of a champion's max Health within 2.5 seconds grants you 40% Movement Speed and 75% Slow Resistance for 3 seconds (10 second cooldown)."],
-         "name": "Stormraider's Surge"
+         "name": "Stormraider's Surge",
+         "image": {
+            "w": 48,
+            "full": "6361.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 0
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6363": {
+         "ranks": 1,
          "id": 6363,
+         "sanitizedDescription": ["Your heals and shields are 10% stronger. Additionally, your shields and heals on other allies increase their armor by 5-22 (based on level) and their magic resistance by half that amount for 3 seconds."],
          "description": ["Your heals and shields are 10% stronger. Additionally, your shields and heals on other allies increase their armor by 5-22 (based on level) and their magic resistance by half that amount for 3 seconds."],
-         "name": "Windspeaker's Blessing"
+         "name": "Windspeaker's Blessing",
+         "image": {
+            "w": 48,
+            "full": "6363.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 384,
+            "x": 96
+         },
+         "prereq": "0",
+         "masteryTree": "Cunning"
       },
       "6223": {
+         "ranks": 1,
          "id": 6223,
+         "sanitizedDescription": ["You take 2 less damage from champion and neutral monster basic attacks"],
          "description": ["You take 2 less damage from champion and neutral monster basic attacks"],
-         "name": "Tough Skin"
+         "name": "Tough Skin",
+         "image": {
+            "w": 48,
+            "full": "6223.png",
+            "sprite": "mastery0.png",
+            "group": "gray_mastery",
+            "h": 48,
+            "y": 288,
+            "x": 0
+         },
+         "prereq": "0",
+         "masteryTree": "Resolve"
       }
    },
    "type": "mastery",
-   "version": "6.8.1"
+   "version": "6.7.1"
 }

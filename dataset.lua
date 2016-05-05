@@ -11,6 +11,12 @@ local dataset = {
     maxRuneCount = 30,
     maxMasteryCount = 30
 }
+local targetCount = 0
+for _,count in pairs(dataset) do
+    targetCount = targetCount + count
+end
+dataset.targetCount = targetCount
+
 local _data = torch.class('Dataset.Data', dataset)
 local _loader = torch.class('Dataset.Loader', dataset)
 
@@ -18,6 +24,7 @@ function _loader:__init(datadir, ptrain, pvalidate, ptest)
     assert(path.isdir(datadir), 'Invalid data directory specified')
     self.dir = datadir
     self.mappings = torch.load(self.dir..path.sep..'map.t7')
+    self:buildInverseMappings()
 
     local input = nn.Identity()()
     local inputOneHot = nn.OneHot(self.mappings.inputs.size)(input)
@@ -52,6 +59,25 @@ function _loader:__init(datadir, ptrain, pvalidate, ptest)
     self.trainRatio = ptrain / total
     self.validateRatio = pvalidate / total
     self.testRatio = ptest / total
+end
+
+function _loader:buildInverseMappings()
+    for _, tables in pairs(self.mappings) do
+        local inverses = {}
+        for category, list in pairs(tables) do
+            if type(list) == 'table' then
+                local inverseMap = {}
+                for id,i in pairs(list) do
+                    inverseMap[i] = id
+                end
+                inverses[category] = inverseMap
+            end
+        end
+
+        for category, list in pairs(inverses) do
+            tables[category..'ByIndex'] = list
+        end
+    end
 end
 
 function _loader:load(batchsize)
@@ -97,68 +123,92 @@ function _loader:getRoleIndex(role)
     return self.mappings.inputs.roles[role]
 end
 
+function _loader:getOutcomeIndex(outcomes)
+    return self.mappings.inputs.outcomes[outcomes]
+end
+
+function _loader:getVersionIndex(versions)
+    return self.mappings.inputs.versions[versions]
+end
+
+function _loader:getRegionIndex(regions)
+    return self.mappings.inputs.regions[regions]
+end
+
+function _loader:getTierIndex(tiers)
+    return self.mappings.inputs.tiers[tiers]
+end
+
+local function getDataByIndexAndType(index, mapping, data)
+    local closestId
+    local closestIndex = 0
+    for id,i in pairs(mapping) do
+        if math.abs(index-i) < math.abs(index-closestIndex) then
+            closestId = id
+            closestIndex = i
+        end
+    end
+
+    if not closestId then
+        return
+    end
+
+    local value = data[tostring(closestId)]
+    local name = value and value.name
+
+    if not name then
+        -- must be by name
+        for k, v in pairs(data) do
+            if v.id == closestId then
+                name = k
+                break
+            end
+        end
+    end
+
+    return name
+end
+
 function _loader:getDataByIndex(index)
     for datatype, list in pairs(self.mappings.targets) do
         if type(list) == 'table' then
-            for id, i in pairs(list) do
+            for _, i in pairs(list) do
                 if index == i then
-                    local data = self[datatype].data
-                    local value = data[tostring(id)]
-                    local name = value and value.name
-
-                    if not name then
-                        -- must be by name
-                        for k, v in pairs(data) do
-                            if v.id == id then
-                                name = k
-                                break
-                            end
-                        end
-                    end
-
-                    return datatype, name
+                    return datatype, getDataByIndexAndType(i, list, self[datatype].data)
                 end
             end
         end
     end
 end
 
-local function sampleOneHot(predictions, loader, count, targetCount, startIndex)
-    for _=1,targetCount do
-        local endIndex = startIndex+count-1
-        local slice = predictions[{1, {startIndex,endIndex}}]
-
-        local _,index = torch.max(slice, 1)
-        local datatype, name = loader:getDataByIndex(index[1])
-        if name then
-            print('datatype: '..datatype..', name: '..name)
-        end
-
-        startIndex = endIndex+1
-    end
-
-    return startIndex
-end
-
-function _loader:sampleOneHot(model, input)
-    local predictions = model:forward(self.inputOneHot:forward(input))
-
-    local length = self.mappings.targets.size
-    local nextIndex = sampleOneHot(predictions, self, length, dataset.maxSpellCount, 1)
-    nextIndex = sampleOneHot(predictions, self, length, dataset.maxItemCount, nextIndex)
-    nextIndex = sampleOneHot(predictions, self, length, dataset.maxRuneCount, nextIndex)
-    sampleOneHot(predictions, self, length, dataset.maxMasteryCount, nextIndex)
-end
-
 function _loader:sample(model, input)
-    local predictions = model:forward(self.inputOneHot:forward(input))
-    predictions:ceil()
+    local mappings = self.mappings.targets
+    local targetTypes = {
+        {count=dataset.maxSpellCount,data=self.spells.data,mapping=mappings.spells,type='spell'},
+        {count=dataset.maxItemCount,data=self.items.data,mapping=mappings.items,type='item'},
+        {count=dataset.maxRuneCount,data=self.runes.data,mapping=mappings.runes,type='rune'},
+        {count=dataset.maxMasteryCount,data=self.masteries.data,mapping=mappings.masteries,type='mastery'},
+    }
 
-    for i=1,predictions:size(2) do
-        local index = predictions[{1, i}]
-        local datatype, name = self:getDataByIndex(index)
-        if name then
-            print('datatype: '..datatype..', name: '..name)
+    local predictions = model:forward(input)
+    for i=1,predictions:size(1) do
+        local pred = predictions[i]
+        pred:round()
+
+        local startIndex
+        local endIndex = 0
+        for _,targetType in ipairs(targetTypes) do
+            startIndex = endIndex+1
+            endIndex = startIndex+targetType.count-1
+
+            local slice = pred[{{startIndex,endIndex}}]
+            for j=1,slice:size(1) do
+                local index = slice[j]
+                local name = getDataByIndexAndType(index, targetType.mapping, targetType.data)
+                if name then
+                    print('datatype: '..targetType.type..', name: '..name)
+                end
+            end
         end
     end
 end
@@ -167,11 +217,6 @@ function _data:__init(loader, inputs, targets, batchsize)
     self.loader = loader
     self.inputs = inputs
     self.targets = targets
-
-    local target = nn.Identity()()
-    local targetOneHot = nn.OneHot(loader.mappings.targets.size)(target)
-    targetOneHot = nn.Reshape(loader.mappings.targets.size * self.targets:size(2))(targetOneHot)
-    self.targetOneHot = nn.gModule({target}, {targetOneHot})
 
     local inputSize = self.inputs:size():totable()
     inputSize[1] = batchsize
@@ -200,6 +245,15 @@ function _data:resetBatch()
     self.indices =  torch.randperm(self.inputs:size(1)):long()
 end
 
+function _data:targetScale()
+    if not self.targetNorm then
+        local maxTarget = torch.ones(self.targets:size(2))*self.loader.mappings.targets.size
+        self.targetNorm = torch.norm(maxTarget)
+    end
+
+    return self.targetNorm
+end
+
 function _data:nextBatch()
     if self:hasNextBatch() then
         local endIndex = math.min(self.indices:size(1), self.batchIndex+self:batchSize()-1)
@@ -209,7 +263,7 @@ function _data:nextBatch()
         self.batch.inputs:index(self.inputs, 1, batchIndices)
         self.batch.targets:index(self.targets, 1, batchIndices)
 
-        return self.loader.inputOneHot:forward(self.batch.inputs), self.batch.targets--self.targetOneHot:forward(self.batch.targets)
+        return self.batch.inputs, self.batch.targets
     end
 end
 
