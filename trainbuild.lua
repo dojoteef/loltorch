@@ -97,6 +97,7 @@ local function getResnetModel()
 
     local view = nn.View(64)
     view:setNumInputDims(2)
+
     model = view(model)
     model = nn.Linear(64, targetCount)(model)
 
@@ -112,7 +113,10 @@ local function getMLPModel()
     local targetSize = dataTrain.targets:size(2)
 
     local input = nn.Identity()()
-    local model = nn.Reshape(inputSize, true)(input)
+    local view = nn.View(inputSize)
+    view:setNumInputDims(1)
+
+    local model = view(input)
     model = nn.BatchNormalization(inputSize)(model)
     model = nn.Linear(inputSize, hidden)(model)
     model = nn.Linear(hidden, targetSize)(model)
@@ -171,11 +175,9 @@ local function trainModel(model, criterion)
     }
 
     local regime = {
-        [1]={learningRate=1e-4,weightDecay=5e-4},
-        [3]={learningRate=5e-5},
-        [30]={learningRate=1e-5,weightDecay=0},
-        [44]={learningRate=5e-6},
-        [53]={learningRate=1e-6},
+        [1]={learningRate=1e-1,weightDecay=1e-4},
+        [80]={learningRate=1e-2},
+        [120]={learningRate=1e-3,weightDecay=0},
     }
 
     local parameters, parameterGradients = model:getParameters()
