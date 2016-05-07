@@ -33,11 +33,11 @@ end
 local dataLoader = dataset.Loader(params.datadir, 8, 1, 1)
 local dataTrain, dataValidate, dataTest = dataLoader:load(params.batchsize)
 
-local function getResnetModel()
-    local function calcluateOutputFeatures(inputFrames, window, stride)
-        return (inputFrames - window) / stride + 1
-    end
+local function calcluateOutputFeatures(inputFrames, window, stride)
+    return (inputFrames - window) / stride + 1
+end
 
+local function getResnetModel()
     local function addResidualLayer(input, features, outputFrameSize, stride)
         local inputFrameSize
         local findConvolutions = function(node)
@@ -109,17 +109,29 @@ end
 
 local function getMLPModel()
     local hidden = 100
-    local inputSize = dataTrain.inputs:size(2)
-    local targetSize = dataTrain.targets:size(2)
+    local inputCount = dataTrain.inputs:size(2)
+    local features = calcluateOutputFeatures(inputCount, 1, 2)
 
     local input = nn.Identity()()
-    local view = nn.View(inputSize)
-    view:setNumInputDims(1)
+    local model = nn.TemporalConvolution(dataLoader:embeddingSize(), 16, 1, 2)(input)
+    model = nn.TemporalBatchNormalization(features)(model)
 
-    local model = view(input)
-    model = nn.BatchNormalization(inputSize)(model)
-    model = nn.Linear(inputSize, hidden)(model)
-    model = nn.Linear(hidden, targetSize)(model)
+    local inputSize = torch.LongTensor(dataTrain.inputs:size())
+    inputSize = inputSize[{{2, inputSize:size()[1]}}]:totable()
+    local inputView = nn.View(features*16)
+    inputView:setNumInputDims(#inputSize)
+    model = inputView(model)
+
+    model = nn.Linear(features*16, hidden)(model)
+
+    local targetSize = torch.LongTensor(dataTrain.targets:size())
+    targetSize = targetSize[{{2, targetSize:size()[1]}}]
+    model = nn.Linear(hidden, torch.prod(targetSize))(model)
+
+    targetSize = targetSize:totable()
+    local outputView = nn.View(unpack(targetSize))
+    outputView:setNumInputDims(#targetSize)
+    model = outputView(model)
 
     model = nn.gModule({input}, {model})
     model.name = 'mlp'
@@ -159,7 +171,7 @@ local function evaluateModel(model, data, criterion)
     end
 
     losses = torch.Tensor(losses)
-    local loss = torch.sum(losses)/(torch.numel(losses)*data:targetScale())
+    local loss = torch.sum(losses)/torch.numel(losses)
     print('loss: '..loss)
 
     return math.abs(loss)
@@ -215,7 +227,7 @@ local function trainModel(model, criterion)
         end
 
         losses = torch.Tensor(losses)
-        local loss = torch.sum(losses)/(torch.numel(losses)*dataTrain:targetScale())
+        local loss = torch.sum(losses)/torch.numel(losses)
         print('training loss: '..loss)
         torch.save(params.snapshot, model)
 

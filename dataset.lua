@@ -1,7 +1,6 @@
 local cjson = require('cjson')
 require('dpnn')
 local file = require('pl.file')
-local nn = require('nn')
 local path = require('pl.path')
 local torch = require('torch')
 
@@ -9,11 +8,21 @@ local dataset = {
     maxSpellCount=2,
     maxItemCount = 7,
     maxRuneCount = 30,
-    maxMasteryCount = 30
+    maxMasteryCount = 30,
+
+    -- Using the knowledge from this forum post for
+    -- determining version, i.e. just using major/minor
+    -- https://developer.riotgames.com/discussion/community-discussion/show/FJT1rYsF
+    versionFromString = function(versionString)
+        local _,_,version = string.find(versionString,"^(%d+%.%d+)")
+        return 'version'..version
+    end
 }
 local targetCount = 0
 for _,count in pairs(dataset) do
-    targetCount = targetCount + count
+    if type(count) == 'number' then
+        targetCount = targetCount + count
+    end
 end
 dataset.targetCount = targetCount
 
@@ -23,37 +32,32 @@ local _loader = torch.class('Dataset.Loader', dataset)
 function _loader:__init(datadir, ptrain, pvalidate, ptest)
     assert(path.isdir(datadir), 'Invalid data directory specified')
     self.dir = datadir
-    self.mappings = torch.load(self.dir..path.sep..'map.t7')
-    self:buildInverseMappings()
-
-    local input = nn.Identity()()
-    local inputOneHot = nn.OneHot(self.mappings.inputs.size)(input)
-    self.inputOneHot = nn.gModule({input}, {inputOneHot})
+    self.embeddings = torch.load(self.dir..path.sep..'embeddings.t7')
 
     local data = file.read(self.dir..path.sep..'champions.json')
     local ok,json = pcall(function() return cjson.decode(data) end)
     assert(ok, 'Unable to load champions.json')
-    self.champions = json
+    self.champion = json
 
     data = file.read(self.dir..path.sep..'items.json')
     ok,json = pcall(function() return cjson.decode(data) end)
     assert(ok, 'Unable to load items.json')
-    self.items = json
+    self.item = json
 
     data = file.read(self.dir..path.sep..'masteries.json')
     ok,json = pcall(function() return cjson.decode(data) end)
     assert(ok, 'Unable to load masteries.json')
-    self.masteries = json
+    self.mastery = json
 
     data = file.read(self.dir..path.sep..'runes.json')
     ok,json = pcall(function() return cjson.decode(data) end)
     assert(ok, 'Unable to load runes.json')
-    self.runes = json
+    self.rune = json
 
     data = file.read(self.dir..path.sep..'spells.json')
     ok,json = pcall(function() return cjson.decode(data) end)
     assert(ok, 'Unable to load spells.json')
-    self.spells = json
+    self.spell = json
 
     local total = ptrain + pvalidate + ptest
     self.trainRatio = ptrain / total
@@ -61,28 +65,14 @@ function _loader:__init(datadir, ptrain, pvalidate, ptest)
     self.testRatio = ptest / total
 end
 
-function _loader:buildInverseMappings()
-    for _, tables in pairs(self.mappings) do
-        local inverses = {}
-        for category, list in pairs(tables) do
-            if type(list) == 'table' then
-                local inverseMap = {}
-                for id,i in pairs(list) do
-                    inverseMap[i] = id
-                end
-                inverses[category] = inverseMap
-            end
-        end
-
-        for category, list in pairs(inverses) do
-            tables[category..'ByIndex'] = list
-        end
-    end
+function _loader:embeddingSize()
+    local _,embedding = next(self.embeddings)
+    return embedding:size(1)
 end
 
 function _loader:load(batchsize)
-    local inputs = torch.load(self.dir..path.sep..'inputs.t7'):double()
-    local targets = torch.load(self.dir..path.sep..'targets.t7'):double()
+    local inputs = torch.load(self.dir..path.sep..'einputs.t7')
+    local targets = torch.load(self.dir..path.sep..'etargets.t7')
     assert(inputs:size(1) == targets:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), target size ('..targets:size(1)..')')
 
     local count = inputs:size(1)
@@ -102,50 +92,19 @@ function _loader:load(batchsize)
     return trainData, validateData, testData
 end
 
-function _loader:getChampionIndex(champion)
-    local championId
-    for name, data in pairs(self.champions.data) do
-        if name == champion then
-            championId = data.id
-            break
-        end
-    end
-
-    assert(championId, 'Could not find champion: '..champion)
-    return self.mappings.inputs.champions[championId]
-end
-
-function _loader:getLaneIndex(lane)
-    return self.mappings.inputs.lanes[lane]
-end
-
-function _loader:getRoleIndex(role)
-    return self.mappings.inputs.roles[role]
-end
-
-function _loader:getOutcomeIndex(outcomes)
-    return self.mappings.inputs.outcomes[outcomes]
-end
-
-function _loader:getVersionIndex(versions)
-    return self.mappings.inputs.versions[versions]
-end
-
-function _loader:getRegionIndex(regions)
-    return self.mappings.inputs.regions[regions]
-end
-
-function _loader:getTierIndex(tiers)
-    return self.mappings.inputs.tiers[tiers]
-end
-
-local function getDataByIndexAndType(index, mapping, data)
+function _loader:getDataByType(vector, targetType)
+    -- Use cosine similarity to determine closest
     local closestId
-    local closestIndex = 0
-    for id,i in pairs(mapping) do
-        if math.abs(index-i) < math.abs(index-closestIndex) then
-            closestId = id
-            closestIndex = i
+    local closestSimilarity = -1
+    local vectorNorm = torch.norm(vector)
+    for id,embedding in pairs(self.embeddings) do
+        local _,_, embeddingType = string.find(id, '^(%a+)')
+        if embeddingType == targetType then
+            local similarity = vector:dot(embedding:double())/(vectorNorm * torch.norm(embedding))
+            if similarity >= closestSimilarity then
+                closestId = id
+                closestSimilarity = similarity
+            end
         end
     end
 
@@ -153,13 +112,16 @@ local function getDataByIndexAndType(index, mapping, data)
         return
     end
 
-    local value = data[tostring(closestId)]
+    local _,_,id = string.find(closestId, '(%d+)')
+    local data = self[targetType].data
+    local value = data[id]
     local name = value and value.name
 
     if not name then
         -- must be by name
+        id = tonumber(id)
         for k, v in pairs(data) do
-            if v.id == closestId then
+            if v.id == id then
                 name = k
                 break
             end
@@ -169,45 +131,63 @@ local function getDataByIndexAndType(index, mapping, data)
     return name
 end
 
-function _loader:getDataByIndex(index)
-    for datatype, list in pairs(self.mappings.targets) do
-        if type(list) == 'table' then
-            for _, i in pairs(list) do
-                if index == i then
-                    return datatype, getDataByIndexAndType(i, list, self[datatype].data)
-                end
-            end
+function _loader:getChampionVector(champion)
+    local championId
+    for name, data in pairs(self.champion.data) do
+        if name == champion then
+            championId = data.id
+            break
         end
     end
+
+    assert(championId, 'Could not find champion: '..champion)
+    return self.embeddings['champion'..championId]
+end
+
+function _loader:getLaneVector(lane)
+    return self.embeddings[lane]
+end
+
+function _loader:getRoleVector(role)
+    return self.embeddings[role]
+end
+
+function _loader:getOutcomeVector(outcome)
+    return self.embeddings[outcome]
+end
+
+function _loader:getVersionVector(version)
+    return self.embeddings['version'..version]
+end
+
+function _loader:getRegionVector(region)
+    return self.embeddings[region]
+end
+
+function _loader:getTierVector(tier)
+    return self.embeddings[tier]
 end
 
 function _loader:sample(model, input)
-    local mappings = self.mappings.targets
     local targetTypes = {
-        {count=dataset.maxSpellCount,data=self.spells.data,mapping=mappings.spells,type='spell'},
-        {count=dataset.maxItemCount,data=self.items.data,mapping=mappings.items,type='item'},
-        {count=dataset.maxRuneCount,data=self.runes.data,mapping=mappings.runes,type='rune'},
-        {count=dataset.maxMasteryCount,data=self.masteries.data,mapping=mappings.masteries,type='mastery'},
+        {count=dataset.maxSpellCount,type='spell'},
+        {count=dataset.maxItemCount,type='item'},
+        {count=dataset.maxRuneCount,type='rune'},
+        {count=dataset.maxMasteryCount,type='mastery'},
     }
 
-    local predictions = model:forward(input)
-    for i=1,predictions:size(1) do
-        local pred = predictions[i]
-        pred:round()
+    local startIndex
+    local endIndex = 0
+    local prediction = model:forward(input)
+    for _,targetType in ipairs(targetTypes) do
+        startIndex = endIndex+1
+        endIndex = startIndex+targetType.count-1
 
-        local startIndex
-        local endIndex = 0
-        for _,targetType in ipairs(targetTypes) do
-            startIndex = endIndex+1
-            endIndex = startIndex+targetType.count-1
-
-            local slice = pred[{{startIndex,endIndex}}]
-            for j=1,slice:size(1) do
-                local index = slice[j]
-                local name = getDataByIndexAndType(index, targetType.mapping, targetType.data)
-                if name then
-                    print('datatype: '..targetType.type..', name: '..name)
-                end
+        local slice = prediction[{{startIndex,endIndex}}]
+        for j=1,slice:size(1) do
+            local name = self:getDataByType(slice[j], targetType.type)
+            if name then
+                print('datatype: '..targetType.type..', name: '..name)
             end
         end
     end
@@ -243,15 +223,6 @@ end
 function _data:resetBatch()
     self.batchIndex = 1
     self.indices =  torch.randperm(self.inputs:size(1)):long()
-end
-
-function _data:targetScale()
-    if not self.targetNorm then
-        local maxTarget = torch.ones(self.targets:size(2))*self.loader.mappings.targets.size
-        self.targetNorm = torch.norm(maxTarget)
-    end
-
-    return self.targetNorm
 end
 
 function _data:nextBatch()
