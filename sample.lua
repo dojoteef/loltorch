@@ -3,6 +3,7 @@ require('nn')
 local nngraph = require('nngraph')
 local path = require('pl.path')
 local torch = require('torch')
+require('MSETableCriterion')
 require('TemporalBatchNormalization')
 
 local cmd = torch.CmdLine()

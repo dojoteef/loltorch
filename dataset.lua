@@ -77,6 +77,8 @@ function _loader:load(batchsize)
     assert(inputs:size(1) == targets:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), target size ('..targets:size(1)..')')
     assert(inputs:size(1) == outcomes:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), outcome size ('..outcomes:size(1)..')')
 
+    torch.setdefaulttensortype(torch.type(inputs))
+
     local count = inputs:size(1)
     local trainIndex = math.floor(count * self.trainRatio)
     local validateIndex = trainIndex + math.floor(count * self.validateRatio)
@@ -229,6 +231,10 @@ function _data:__init(loader, inputs, targets, outcomes, batchsize, onlywins)
     }
 
     self:resetBatch()
+end
+
+function _data:size()
+    return self.inputs:size(1)
 end
 
 function _data:batchSize()

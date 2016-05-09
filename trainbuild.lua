@@ -1,9 +1,11 @@
 local dataset = require('dataset')
 local nn = require('nn')
-local nngraph = require('nngraph')
+local nngraph = require('nngraphshare')
 local optim = require('optim')
 local path = require('pl.path')
+local threads = require('threads')
 local torch = require('torch')
+require('MSETableCriterion')
 require('TemporalBatchNormalization')
 
 local cmd = torch.CmdLine()
@@ -22,6 +24,8 @@ cmd:option('-modeltype','resnet','what type of model to create')
 cmd:option('-continue','','where to load a previous model from to continue training')
 cmd:option('-threshold',1e-6,'threshold to reach in training')
 cmd:option('-debug',false,'whether to set debug mode')
+cmd:option('-verbose',false,'whether to have verbose output')
+cmd:option('-threads',1,'how many threads to use for training')
 cmd:text()
 
 local params = cmd:parse(arg)
@@ -30,23 +34,64 @@ if params.debug then
     nngraph.setDebug(true)
 end
 
-
-local dataLoader = dataset.Loader(params.datadir, 8, 1, 1)
-local dataTrain, dataValidate, dataTest = dataLoader:load(params.batchsize)
-
 local function collectAllGarbage()
-    local timer = torch.Timer()
-    print('collecting garbage...')
     local mem
     while mem ~= collectgarbage('count') do
         mem = collectgarbage('count')
         collectgarbage()
     end
-    print('garbage collection complete - timer: '..timer:time().real)
 end
+
+
+local dataLoader = dataset.Loader(params.datadir, 8, 1, 1)
+local dataTrain, dataValidate, dataTest = dataLoader:load(params.batchsize)
 
 local function calculateOutputFeatures(inputFrames, window, stride)
     return math.floor((inputFrames - window) / stride + 1)
+end
+
+local function getTrainingModel(input)
+    local inputSplit = nn.SplitTable(1, 2)(input)
+
+    local target = nn.Identity()()
+    local targetSplit = nn.SplitTable(1, 2)(target)
+
+    local numElements = dataTrain.targets:size(2)
+    local splitInputs = {inputSplit:split(numElements)}
+    local splitTargets = {targetSplit:split(numElements)}
+
+    local output = {}
+    for i=1,numElements do
+        table.insert(output, nn.Identity()({splitInputs[i], splitTargets[i]}))
+    end
+
+    local model = nn.gModule({input, target}, output)
+    model.verbose = params.verbose
+
+    local criterion = nn.ParallelCriterion(true)
+    for _=1,dataTrain.targets:size(2) do
+        local mse = nn.MSETableCriterion()
+        local cosine = nn.CosineEmbeddingCriterion(0.5)
+
+        local multi = nn.MultiCriterion()
+        multi:add(cosine)
+        multi:add(mse, 0.5)
+
+        criterion:add(multi)
+    end
+
+    local optimState = {
+        momentum = 0.9,
+        dampening = 0,
+        nesterov = true,
+        regime = {
+            [1]={learningRate=1e-2,weightDecay=1e-4},
+            [80]={learningRate=1e-3},
+            [120]={learningRate=1e-4,weightDecay=0},
+        }
+    }
+
+    return {model=model,criterion=criterion,optimState=optimState}
 end
 
 local function getResnetModel()
@@ -104,6 +149,7 @@ local function getResnetModel()
 
     local view = nn.View(64)
     view:setNumInputDims(2)
+    model = view(model)
 
     local targetSize = torch.LongTensor(dataTrain.targets:size())
     targetSize = targetSize[{{2, targetSize:size()[1]}}]
@@ -115,55 +161,14 @@ local function getResnetModel()
     model = outputView(model)
 
     model = nn.gModule({input}, {model})
-    model.verbose = params.debug
+    model.verbose = params.verbose
     model.name = 'resnet'
 
-    local criterion = nn.ParallelCriterion(true)
-    for _=1,targetSize[1] do
-        criterion:add(nn.CosineEmbeddingCriterion())
-    end
-
-    return model, criterion
+    return model
 end
 
 local function getMLPModel()
-    local function getTrainingModel(input)
-        local inputSplit = nn.SplitTable(1, 2)(input)
-
-        local target = nn.Identity()()
-        local targetSplit = nn.SplitTable(1, 2)(target)
-
-        local numElements = dataTrain.targets:size(2)
-        local splitInputs = {inputSplit:split(numElements)}
-        local splitTargets = {targetSplit:split(numElements)}
-
-        local output = {}
-        for i=1,numElements do
-            table.insert(output, nn.Identity()({splitInputs[i], splitTargets[i]}))
-        end
-
-        local model = nn.gModule({input, target}, output)
-
-        local criterion = nn.ParallelCriterion(true)
-        for _=1,dataTrain.targets:size(2) do
-            criterion:add(nn.CosineEmbeddingCriterion())
-        end
-
-        local optimState = {
-            momentum = 0.9,
-            dampening = 0,
-            nesterov = true,
-            regime = {
-                [1]={learningRate=1e-1,weightDecay=1e-4},
-                [80]={learningRate=1e-2},
-                [120]={learningRate=1e-3,weightDecay=0},
-            }
-        }
-
-        return {model=model,criterion=criterion,optimState=optimState}
-    end
-
-    local hidden = 100
+    local hidden = 250
     local inputCount = dataTrain.inputs:size(2)
     local features = calculateOutputFeatures(inputCount, 1, 2)
 
@@ -190,9 +195,10 @@ local function getMLPModel()
     model = outputView(model)
 
     model = nn.gModule({input}, {model})
+    model.verbose = params.verbose
     model.name = 'mlp'
 
-    return model, getTrainingModel(model())
+    return model
 end
 
 local modelFactory = {
@@ -204,7 +210,8 @@ local function getModel()
     if not path.exists(params.continue) then
         print('creating model')
         local factoryMethod = modelFactory[params.modeltype]
-        return factoryMethod()
+        local model = factoryMethod()
+        return model, getTrainingModel(model())
     else
         print('continuing from '..params.continue)
         local loaded = torch.load(params.continue)
@@ -234,64 +241,83 @@ local function evaluateModel(model, data)
 end
 
 local function trainModel(model, training)
-    local criterion = training.criterion
-    local trainingModel = training.model
-    local parameters, parameterGradients = trainingModel:getParameters()
-    local function calculateLoss(inputParameters)
-        if parameters ~= inputParameters then
-            parameters:copy(inputParameters)
+    threads.serialization('threads.sharedserialize')
+    local pool = threads.Threads(
+        params.threads,
+        function ()
+            require('dataset')
+            require('nn')
+            require('nngraphshare')
+            require('MSETableCriterion')
+            require('TemporalBatchNormalization')
+        end,
+
+        function ()
+            local criterion = training.criterion:clone()
+            local trainingModel = training.model:clone('weight', 'bias')
+            local _, gradients = trainingModel:getParameters()
+
+            function calculateLoss(inputs, targets, outcomes)
+                gradients:zero()
+
+                local predictions = trainingModel:forward({inputs, targets})
+                local loss = criterion:forward(predictions, outcomes)
+                local dloss_dw = criterion:backward(predictions, outcomes)
+                trainingModel:backward(inputs, dloss_dw)
+
+                return loss, gradients
+            end
         end
+    )
 
-        parameterGradients:zero()
-
-        local inputs, targets, outcomes = dataTrain:nextBatch()
-        local predictions = trainingModel:forward({inputs, targets})
-        local loss = criterion:forward(predictions, outcomes)
-        local dloss_dw = criterion:backward(predictions, outcomes)
-        trainingModel:backward(inputs, dloss_dw)
-
-        return loss, parameterGradients
-    end
-
+    local totalLoss = 0
     local timer = torch.Timer()
     local optimState = training.optimState
     local snapshot = {model=model,training=training}
-    local startingEpoch = optimState.epoch or 1
-    for epoch=startingEpoch, params.epochs do
-        local regimeChange = optimState.regime[epoch]
-        if regimeChange then
-            for k,v in pairs(regimeChange) do
-                optimState[k] = v
-            end
+    local epoch = optimState.epoch or 1
+    local regimeChange = optimState.regime[epoch]
+    if regimeChange then
+        for k,v in pairs(regimeChange) do
+            optimState[k] = v
         end
-
-        optimState.epoch = epoch
-        print('starting epoch '..epoch..' - timer: '..timer:time().real)
-
-        model:training()
-        trainingModel:training()
-        local losses = {}
-        while dataTrain:hasNextBatch() do
-            local _, batchLoss = optim.sgd(calculateLoss, parameters, optimState)
-            table.insert(losses, batchLoss[1])
-        end
-
-        losses = torch.Tensor(losses)
-        local loss = torch.sum(losses)/torch.numel(losses)
-        print('training loss: '..loss)
-        torch.save(params.snapshot, snapshot)
-
-        if evaluateModel(model, dataValidate) < params.threshold then
-            break
-        end
-
-        dataTrain:resetBatch()
-        dataValidate:resetBatch()
-
-        -- collect all garbage at the end of each epoch because my memory
-        -- constraints are tight
-        collectAllGarbage()
     end
+
+    print('starting epoch '..epoch..' - timer: '..timer:time().real)
+
+    model:training()
+    training.model:training()
+    local parameters = training.model:getParameters()
+    while dataTrain:hasNextBatch() do
+        local inputs, targets, outcomes = dataTrain:nextBatch()
+        pool:addjob(
+            function(tinputs, ttargets, toutcomes)
+                return calculateLoss(tinputs, ttargets, toutcomes)
+            end,
+            function(loss, gradients)
+                totalLoss = totalLoss + loss
+                optim.sgd(function() return loss, gradients end, parameters, optimState)
+            end,
+            inputs:clone(),
+            targets:clone(),
+            outcomes:clone()
+        )
+    end
+    pool:synchronize()
+
+    print('training loss: '..totalLoss/dataTrain:size()..' - timer: '..timer:time().real)
+
+    -- just finished the current epoch so we should start on
+    -- the next epoch for the snapshot
+    optimState.epoch = epoch + 1
+    torch.save(params.snapshot, snapshot)
+
+    if evaluateModel(model, dataValidate) < params.threshold then
+        print('reached validation threshold')
+    end
+
+    dataTrain:resetBatch()
+    dataValidate:resetBatch()
+    collectAllGarbage()
 
     return model
 end
@@ -328,8 +354,10 @@ if not ok then
     os.exit()
 end
 
-model:evaluate()
-torch.save(params.model, model)
+if training.optimState.epoch >= params.epochs then
+    model:evaluate()
+    torch.save(params.model, model)
+end
 
 ok, errmsg = xpcall(evaluateModel, errorHandler(model), model, dataTest)
 if not ok then
