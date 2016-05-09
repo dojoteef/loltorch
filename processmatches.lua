@@ -12,7 +12,6 @@ cmd:text()
 cmd:text('Options')
 cmd:option('-matchdir','matches','the directory where the matches are located')
 cmd:option('-datadir','dataset','the directory where to store the serialized dataset')
-cmd:option('-randomize',false,'whether to randomize or used sorted order for classification index')
 cmd:text()
 
 -- parse input params
@@ -192,10 +191,12 @@ local function matchesToTensor(matchdir, datadir)
     local _,embedding = next(embeddings)
     local embeddingSize = embedding:size(1)
 
-    local inputLen = 7
+    local inputLen = 6
     local targetlen = dataset.maxSpellCount + dataset.maxItemCount + dataset.maxRuneCount + dataset.maxMasteryCount
-    local targets = torch.FloatTensor(participantCount, targetlen, embeddingSize):zero()
+
     local inputs = torch.FloatTensor(participantCount, inputLen, embeddingSize):zero()
+    local targets = torch.FloatTensor(participantCount, targetlen, embeddingSize):zero()
+    local outcomes = torch.FloatTensor(participantCount)
 
     local dataIndex = 1
     for _,matchFile in pairs(dir.getallfiles(matchdir, '*.json')) do
@@ -211,13 +212,14 @@ local function matchesToTensor(matchdir, datadir)
                             print('Processed '..dataIndex..' participants')
                         end
 
+                        outcomes[dataIndex] = participant.stats.winner and 1 or -1
+
                         input[1] = embeddings[participant.timeline.role]
                         input[2] = embeddings[getChampionId(participant)]
                         input[3] = embeddings[getLane(participant.timeline.lane)]
-                        input[4] = embeddings[participant.stats.winner and 'WIN' or 'LOSS']
-                        input[5] = embeddings[dataset.versionFromString(match.matchVersion)]
-                        input[6] = embeddings[string.lower(match.region)]
-                        input[7] = embeddings[participant.highestAchievedSeasonTier or 'UNRANKED']
+                        input[4] = embeddings[dataset.versionFromString(match.matchVersion)]
+                        input[5] = embeddings[string.lower(match.region)]
+                        input[6] = embeddings[participant.highestAchievedSeasonTier or 'UNRANKED']
 
                         local offset = 0
                         offset = addSpells(embeddings, participant, target, offset)
@@ -234,8 +236,9 @@ local function matchesToTensor(matchdir, datadir)
 
 
     print('saving tensors...')
-    torch.save(datadir..path.sep..'einputs.t7', inputs)
-    torch.save(datadir..path.sep..'etargets.t7', targets)
+    torch.save(datadir..path.sep..'inputs.t7', inputs)
+    torch.save(datadir..path.sep..'targets.t7', targets)
+    torch.save(datadir..path.sep..'outcomes.t7', outcomes)
 
     print('done in time (seconds): ', timer:time().real)
 end

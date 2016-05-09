@@ -1,5 +1,4 @@
 local cjson = require('cjson')
-require('dpnn')
 local file = require('pl.file')
 local path = require('pl.path')
 local torch = require('torch')
@@ -71,9 +70,12 @@ function _loader:embeddingSize()
 end
 
 function _loader:load(batchsize)
-    local inputs = torch.load(self.dir..path.sep..'einputs.t7')
-    local targets = torch.load(self.dir..path.sep..'etargets.t7')
+    local inputs = torch.load(self.dir..path.sep..'inputs.t7')
+    local targets = torch.load(self.dir..path.sep..'targets.t7')
+    local outcomes = torch.load(self.dir..path.sep..'outcomes.t7')
+    assert(inputs:type() == targets:type(), 'Dataset mismatch: input type ('..inputs:type()..'), target type ('..targets:type()..')')
     assert(inputs:size(1) == targets:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), target size ('..targets:size(1)..')')
+    assert(inputs:size(1) == outcomes:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), outcome size ('..outcomes:size(1)..')')
 
     local count = inputs:size(1)
     local trainIndex = math.floor(count * self.trainRatio)
@@ -81,13 +83,13 @@ function _loader:load(batchsize)
 
     local indices = torch.randperm(inputs:size(1)):long()
     local view = indices[{{1, trainIndex}}]
-    local trainData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), batchsize)
+    local trainData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize)
 
     view = indices[{{trainIndex+1, validateIndex}}]
-    local validateData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), batchsize)
+    local validateData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize, true)
 
     view = indices[{{validateIndex+1, count}}]
-    local testData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), batchsize)
+    local testData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize, true)
 
     return trainData, validateData, testData
 end
@@ -100,7 +102,7 @@ function _loader:getDataByType(vector, targetType)
     for id,embedding in pairs(self.embeddings) do
         local _,_, embeddingType = string.find(id, '^(%a+)')
         if embeddingType == targetType then
-            local similarity = vector:dot(embedding:double())/(vectorNorm * torch.norm(embedding))
+            local similarity = vector:dot(embedding)/(vectorNorm * torch.norm(embedding))
             if similarity >= closestSimilarity then
                 closestId = id
                 closestSimilarity = similarity
@@ -128,7 +130,7 @@ function _loader:getDataByType(vector, targetType)
         end
     end
 
-    return name
+    return name, closestSimilarity
 end
 
 function _loader:getChampionVector(champion)
@@ -152,10 +154,6 @@ function _loader:getRoleVector(role)
     return self.embeddings[role]
 end
 
-function _loader:getOutcomeVector(outcome)
-    return self.embeddings[outcome]
-end
-
 function _loader:getVersionVector(version)
     return self.embeddings['version'..version]
 end
@@ -168,7 +166,7 @@ function _loader:getTierVector(tier)
     return self.embeddings[tier]
 end
 
-function _loader:sample(model, input)
+function _loader:sample(model, input, threshold)
     local targetTypes = {
         {count=dataset.maxSpellCount,type='spell'},
         {count=dataset.maxItemCount,type='item'},
@@ -185,18 +183,34 @@ function _loader:sample(model, input)
 
         local slice = prediction[{{startIndex,endIndex}}]
         for j=1,slice:size(1) do
-            local name = self:getDataByType(slice[j], targetType.type)
-            if name then
-                print('datatype: '..targetType.type..', name: '..name)
+            local name, confidence = self:getDataByType(slice[j], targetType.type)
+            if name and confidence > threshold then
+                print('datatype: '..targetType.type..', name: '..name..', confidence: '..confidence)
             end
         end
     end
 end
 
-function _data:__init(loader, inputs, targets, batchsize)
+function _data:__init(loader, inputs, targets, outcomes, batchsize, onlywins)
     self.loader = loader
+
+    if onlywins then
+        local j = 1
+        local wins = torch.LongTensor(outcomes[torch.eq(outcomes,1)]:size(1))
+        for i=1,outcomes:size(1) do
+            if outcomes[i] == 1 then
+                wins[j] = i
+                j = j + 1
+            end
+        end
+        inputs = inputs:index(1, wins)
+        targets = targets:index(1, wins)
+        outcomes = outcomes:index(1, wins)
+    end
+
     self.inputs = inputs
     self.targets = targets
+    self.outcomes = outcomes
 
     local inputSize = self.inputs:size():totable()
     inputSize[1] = batchsize
@@ -204,9 +218,14 @@ function _data:__init(loader, inputs, targets, batchsize)
     local targetSize = self.targets:size():totable()
     targetSize[1] = batchsize
 
+    local inputType = torch.factory(inputs:type())
+    local targetType = torch.factory(targets:type())
+    local outcomeType = torch.factory(outcomes:type())
+
     self.batch = {
-        inputs=torch.zeros(unpack(inputSize)),
-        targets=torch.zeros(unpack(targetSize))
+        inputs=inputType():resize(unpack(inputSize)):zero(),
+        targets=targetType():resize(unpack(targetSize)):zero(),
+        outcomes=outcomeType():resize(batchsize):fill(1)
     }
 
     self:resetBatch()
@@ -233,8 +252,9 @@ function _data:nextBatch()
 
         self.batch.inputs:index(self.inputs, 1, batchIndices)
         self.batch.targets:index(self.targets, 1, batchIndices)
+        self.batch.outcomes:index(self.outcomes, 1, batchIndices)
 
-        return self.batch.inputs, self.batch.targets
+        return self.batch.inputs, self.batch.targets, self.batch.outcomes
     end
 end
 

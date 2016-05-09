@@ -16,10 +16,10 @@ cmd:option('-debug',false,'whether to set debug mode')
 cmd:option('-role','DUO_SUPPORT','what role to predict')
 cmd:option('-lane','BOT','what lane to predict')
 cmd:option('-champion','Janna','what champion to predict')
-cmd:option('-outcome','WIN','what outcome to predict \'WIN\' or \'LOSS\'')
 cmd:option('-version','6.7','what version to predict')
 cmd:option('-region','na','what region to predict')
 cmd:option('-tier','MASTER','what tier to predict')
+cmd:option('-threshold',.9,'the minimum confidence threshold for output')
 cmd:text()
 
 local params = cmd:parse(arg)
@@ -31,17 +31,22 @@ end
 print('loading model from '..params.model)
 assert(path.exists(params.model), 'Cannot find the model')
 local model = torch.load(params.model)
+local modelType = torch.type(model)
+if modelType == 'table' then
+    model = model.model
+end
+assert(model and torch.typename(model), 'Unable to load model')
+
 model:evaluate()
 
 local dataLoader = dataset.Loader(params.datadir, 8, 1, 1)
-local input = torch.Tensor(1, 7, dataLoader:embeddingSize())
+local input = torch.FloatTensor(1, 6, dataLoader:embeddingSize())
 input[1][1] = dataLoader:getRoleVector(params.role)
 input[1][2] = dataLoader:getChampionVector(params.champion)
 input[1][3] = dataLoader:getLaneVector(params.lane)
-input[1][4] = dataLoader:getOutcomeVector(params.outcome)
-input[1][5] = dataLoader:getVersionVector(params.version)
-input[1][6] = dataLoader:getRegionVector(params.region)
-input[1][7] = dataLoader:getTierVector(params.tier)
+input[1][4] = dataLoader:getVersionVector(params.version)
+input[1][5] = dataLoader:getRegionVector(params.region)
+input[1][6] = dataLoader:getTierVector(params.tier)
 
 print('champion: '..params.champion..', role: '..params.role..', lane: '..params.lane)
-dataLoader:sample(model, input)
+dataLoader:sample(model, input, params.threshold)

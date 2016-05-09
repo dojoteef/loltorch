@@ -309,7 +309,6 @@ local function generateCorpus(datadir, outfile)
 
     generateShuffledCorpus({{'DUO', 'NONE', 'SOLO', 'DUO_CARRY', 'DUO_SUPPORT'}}, corpus) --roles
     generateShuffledCorpus({{'MID', 'TOP', 'JUNGLE', 'BOT'}}, corpus) --lanes
-    generateShuffledCorpus({{'WIN', 'LOSS'}}, corpus) --outcomes
     generateShuffledCorpus({tablex.keys(lol.api.Regions)}, corpus) --regions
     generateShuffledCorpus({{'CHALLENGER', 'MASTER', 'DIAMOND', 'PLATINUM', 'GOLD', 'SILVER', 'BRONZE', 'UNRANKED'}}, corpus) --tiers
 

@@ -17,8 +17,9 @@ cmd:option('-epochs',200,'how many epochs to process')
 cmd:option('-seed',1,'manually set the random seed')
 cmd:option('-datadir','dataset','the directory where the dataset is located')
 cmd:option('-snapshot','snapshot.t7','where to save snapshots of the in training model')
-cmd:option('-model','model.t7','where to save/load the model to/from (if model exists it will be loaded and training will continue on it)')
+cmd:option('-model','model.t7','where to save the final model')
 cmd:option('-modeltype','resnet','what type of model to create')
+cmd:option('-continue','','where to load a previous model from to continue training')
 cmd:option('-threshold',1e-6,'threshold to reach in training')
 cmd:option('-debug',false,'whether to set debug mode')
 cmd:text()
@@ -33,8 +34,19 @@ end
 local dataLoader = dataset.Loader(params.datadir, 8, 1, 1)
 local dataTrain, dataValidate, dataTest = dataLoader:load(params.batchsize)
 
-local function calcluateOutputFeatures(inputFrames, window, stride)
-    return (inputFrames - window) / stride + 1
+local function collectAllGarbage()
+    local timer = torch.Timer()
+    print('collecting garbage...')
+    local mem
+    while mem ~= collectgarbage('count') do
+        mem = collectgarbage('count')
+        collectgarbage()
+    end
+    print('garbage collection complete - timer: '..timer:time().real)
+end
+
+local function calculateOutputFeatures(inputFrames, window, stride)
+    return math.floor((inputFrames - window) / stride + 1)
 end
 
 local function getResnetModel()
@@ -52,7 +64,7 @@ local function getResnetModel()
         assert(inputFrameSize, 'Could not find outputFrameSize from previous TemporalConvolution module')
 
         stride = stride or 1
-        features = calcluateOutputFeatures(features, 1, stride)
+        features = calculateOutputFeatures(features, 1, stride)
 
         local layer = nn.TemporalConvolution(inputFrameSize, outputFrameSize, 1, stride)(input)
         layer = nn.TemporalBatchNormalization(features)(layer)
@@ -74,16 +86,11 @@ local function getResnetModel()
         return layer, features
     end
 
-    local inputSize = dataLoader.mappings.inputs.size
     local inputCount = dataTrain.inputs:size(2)
-    local targetCount = dataTrain.targets:size(2)
-    local embeddingSize = 3
+    local features = calculateOutputFeatures(inputCount, 1, 2)
 
     local input = nn.Identity()()
-    local model = nn.LookupTable(inputSize, embeddingSize)(input)
-    model = nn.TemporalConvolution(embeddingSize, 16, 1, 2)(model)
-
-    local features = calcluateOutputFeatures(inputCount, 1, 2)
+    local model = nn.TemporalConvolution(dataLoader:embeddingSize(), 16, 1, 2)(input)
     model = nn.TemporalBatchNormalization(features)(model)
     model = nn.ReLU(true)(model)
 
@@ -98,19 +105,67 @@ local function getResnetModel()
     local view = nn.View(64)
     view:setNumInputDims(2)
 
-    model = view(model)
-    model = nn.Linear(64, targetCount)(model)
+    local targetSize = torch.LongTensor(dataTrain.targets:size())
+    targetSize = targetSize[{{2, targetSize:size()[1]}}]
+    model = nn.Linear(64, torch.prod(targetSize))(model)
+
+    targetSize = targetSize:totable()
+    local outputView = nn.View(table.unpack(targetSize))
+    outputView:setNumInputDims(#targetSize)
+    model = outputView(model)
 
     model = nn.gModule({input}, {model})
+    model.verbose = params.debug
     model.name = 'resnet'
 
-    return model, nn.MSECriterion()
+    local criterion = nn.ParallelCriterion(true)
+    for _=1,targetSize[1] do
+        criterion:add(nn.CosineEmbeddingCriterion())
+    end
+
+    return model, criterion
 end
 
 local function getMLPModel()
+    local function getTrainingModel(input)
+        local inputSplit = nn.SplitTable(1, 2)(input)
+
+        local target = nn.Identity()()
+        local targetSplit = nn.SplitTable(1, 2)(target)
+
+        local numElements = dataTrain.targets:size(2)
+        local splitInputs = {inputSplit:split(numElements)}
+        local splitTargets = {targetSplit:split(numElements)}
+
+        local output = {}
+        for i=1,numElements do
+            table.insert(output, nn.Identity()({splitInputs[i], splitTargets[i]}))
+        end
+
+        local model = nn.gModule({input, target}, output)
+
+        local criterion = nn.ParallelCriterion(true)
+        for _=1,dataTrain.targets:size(2) do
+            criterion:add(nn.CosineEmbeddingCriterion())
+        end
+
+        local optimState = {
+            momentum = 0.9,
+            dampening = 0,
+            nesterov = true,
+            regime = {
+                [1]={learningRate=1e-1,weightDecay=1e-4},
+                [80]={learningRate=1e-2},
+                [120]={learningRate=1e-3,weightDecay=0},
+            }
+        }
+
+        return {model=model,criterion=criterion,optimState=optimState}
+    end
+
     local hidden = 100
     local inputCount = dataTrain.inputs:size(2)
-    local features = calcluateOutputFeatures(inputCount, 1, 2)
+    local features = calculateOutputFeatures(inputCount, 1, 2)
 
     local input = nn.Identity()()
     local model = nn.TemporalConvolution(dataLoader:embeddingSize(), 16, 1, 2)(input)
@@ -123,20 +178,21 @@ local function getMLPModel()
     model = inputView(model)
 
     model = nn.Linear(features*16, hidden)(model)
+    model = nn.ReLU(true)(model)
 
     local targetSize = torch.LongTensor(dataTrain.targets:size())
     targetSize = targetSize[{{2, targetSize:size()[1]}}]
     model = nn.Linear(hidden, torch.prod(targetSize))(model)
 
     targetSize = targetSize:totable()
-    local outputView = nn.View(unpack(targetSize))
+    local outputView = nn.View(table.unpack(targetSize))
     outputView:setNumInputDims(#targetSize)
     model = outputView(model)
 
     model = nn.gModule({input}, {model})
     model.name = 'mlp'
 
-    return model, nn.MSECriterion()
+    return model, getTrainingModel(model())
 end
 
 local modelFactory = {
@@ -145,24 +201,24 @@ local modelFactory = {
 }
 
 local function getModel()
-    local model, criterion
-    if not path.exists(params.model) then
+    if not path.exists(params.continue) then
+        print('creating model')
         local factoryMethod = modelFactory[params.modeltype]
-        model, criterion = factoryMethod()
+        return factoryMethod()
     else
-        print('loading model from '..params.model)
-        model = torch.load(params.model)
+        print('continuing from '..params.continue)
+        local loaded = torch.load(params.continue)
+        assert(loaded and loaded.model and loaded.training, 'Unable to load '..params.continue)
+        return loaded.model, loaded.training
     end
-
-    assert(model, 'Unable to load model')
-    return model, criterion
 end
 
-local function evaluateModel(model, data, criterion)
+local function evaluateModel(model, data)
     print('Evaluating...')
     model:evaluate()
 
     local losses = {}
+    local criterion = nn.MSECriterion()
     while data:hasNextBatch() do
         local inputs, targets = data:nextBatch()
         local predictions = model:forward(inputs)
@@ -177,22 +233,10 @@ local function evaluateModel(model, data, criterion)
     return math.abs(loss)
 end
 
-local function trainModel(model, criterion)
-    local optimState = {
-        learningRate = 1e-4,
-        weightDecay = 1e-4,
-        momentum = 0.9,
-        dampening = 0,
-        nesterov = true
-    }
-
-    local regime = {
-        [1]={learningRate=1e-1,weightDecay=1e-4},
-        [80]={learningRate=1e-2},
-        [120]={learningRate=1e-3,weightDecay=0},
-    }
-
-    local parameters, parameterGradients = model:getParameters()
+local function trainModel(model, training)
+    local criterion = training.criterion
+    local trainingModel = training.model
+    local parameters, parameterGradients = trainingModel:getParameters()
     local function calculateLoss(inputParameters)
         if parameters ~= inputParameters then
             parameters:copy(inputParameters)
@@ -200,26 +244,32 @@ local function trainModel(model, criterion)
 
         parameterGradients:zero()
 
-        local inputs, targets = dataTrain:nextBatch()
-        local predictions = model:forward(inputs)
-        local loss = criterion:forward(predictions, targets)
-        local dloss_dw = criterion:backward(predictions, targets)
-        model:backward(inputs, dloss_dw)
+        local inputs, targets, outcomes = dataTrain:nextBatch()
+        local predictions = trainingModel:forward({inputs, targets})
+        local loss = criterion:forward(predictions, outcomes)
+        local dloss_dw = criterion:backward(predictions, outcomes)
+        trainingModel:backward(inputs, dloss_dw)
 
         return loss, parameterGradients
     end
 
-    for epoch=1, params.epochs do
-        local regimeChange = regime[epoch]
+    local timer = torch.Timer()
+    local optimState = training.optimState
+    local snapshot = {model=model,training=training}
+    local startingEpoch = optimState.epoch or 1
+    for epoch=startingEpoch, params.epochs do
+        local regimeChange = optimState.regime[epoch]
         if regimeChange then
-            optimState.learningRate = regimeChange.learningRate or optimState.learningRate
-            optimState.weightDecay = regimeChange.weightDecay or optimState.weightDecay
+            for k,v in pairs(regimeChange) do
+                optimState[k] = v
+            end
         end
 
         optimState.epoch = epoch
-        print('starting epoch '..epoch..':')
+        print('starting epoch '..epoch..' - timer: '..timer:time().real)
 
         model:training()
+        trainingModel:training()
         local losses = {}
         while dataTrain:hasNextBatch() do
             local _, batchLoss = optim.sgd(calculateLoss, parameters, optimState)
@@ -229,14 +279,18 @@ local function trainModel(model, criterion)
         losses = torch.Tensor(losses)
         local loss = torch.sum(losses)/torch.numel(losses)
         print('training loss: '..loss)
-        torch.save(params.snapshot, model)
+        torch.save(params.snapshot, snapshot)
 
-        if evaluateModel(model, dataValidate, criterion) < params.threshold then
+        if evaluateModel(model, dataValidate) < params.threshold then
             break
         end
 
         dataTrain:resetBatch()
         dataValidate:resetBatch()
+
+        -- collect all garbage at the end of each epoch because my memory
+        -- constraints are tight
+        collectAllGarbage()
     end
 
     return model
@@ -264,8 +318,9 @@ local function errorHandler(model)
     return handler
 end
 
-local model, criterion = getModel()
-local ok, errmsg = xpcall(trainModel, errorHandler(model), model, criterion)
+collectAllGarbage()
+local model, training = getModel()
+local ok, errmsg = xpcall(trainModel, errorHandler(model), model, training)
 if not ok then
     print('training failed!')
 
@@ -276,7 +331,7 @@ end
 model:evaluate()
 torch.save(params.model, model)
 
-ok, errmsg = xpcall(evaluateModel, errorHandler(model), model, dataTest, criterion)
+ok, errmsg = xpcall(evaluateModel, errorHandler(model), model, dataTest)
 if not ok then
     print('testing failed!')
 

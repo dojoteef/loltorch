@@ -1,3 +1,4 @@
 #!/bin/bash
+th generatecorpus.lua -datadir dataset -outfile corpus.txt
 word2vec -train dataset/corpus.txt -output dataset/embeddings.txt -size 10 -window 8 -negative 15 -iter 10 -min-count 1
 th convertembedding.lua -datadir dataset -outfile embeddings.t7
