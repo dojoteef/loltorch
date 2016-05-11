@@ -69,6 +69,10 @@ function _loader:embeddingSize()
     return embedding:size(1)
 end
 
+function _loader:tensorType()
+    return torch.type(self.inputs)
+end
+
 function _loader:load(batchsize)
     local inputs = torch.load(self.dir..path.sep..'inputs.t7')
     local targets = torch.load(self.dir..path.sep..'targets.t7')
@@ -85,13 +89,13 @@ function _loader:load(batchsize)
 
     local indices = torch.randperm(inputs:size(1)):long()
     local view = indices[{{1, trainIndex}}]
-    local trainData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize)
+    local trainData = dataset.Data(inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize)
 
     view = indices[{{trainIndex+1, validateIndex}}]
-    local validateData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize, true)
+    local validateData = dataset.Data(inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize, true)
 
     view = indices[{{validateIndex+1, count}}]
-    local testData = dataset.Data(self, inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize, true)
+    local testData = dataset.Data(inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize, true)
 
     return trainData, validateData, testData
 end
@@ -193,9 +197,7 @@ function _loader:sample(model, input, threshold)
     end
 end
 
-function _data:__init(loader, inputs, targets, outcomes, batchsize, onlywins)
-    self.loader = loader
-
+function _data:__init(inputs, targets, outcomes, batchsize, onlywins)
     if onlywins then
         local j = 1
         local wins = torch.LongTensor(outcomes[torch.eq(outcomes,1)]:size(1))
@@ -233,6 +235,10 @@ function _data:__init(loader, inputs, targets, outcomes, batchsize, onlywins)
     self:resetBatch()
 end
 
+function _data:tensorType()
+    return torch.type(self.inputs)
+end
+
 function _data:size()
     return self.inputs:size(1)
 end
@@ -241,20 +247,19 @@ function _data:batchSize()
     return self.batch.inputs:size(1)
 end
 
-function _data:hasNextBatch()
-    return self.batchIndex < self.inputs:size(1)
+function _data:batchCount()
+    return self:size()/self:batchSize()
 end
 
 function _data:resetBatch()
-    self.batchIndex = 1
     self.indices =  torch.randperm(self.inputs:size(1)):long()
 end
 
-function _data:nextBatch()
-    if self:hasNextBatch() then
-        local endIndex = math.min(self.indices:size(1), self.batchIndex+self:batchSize()-1)
-        local batchIndices = self.indices[{{self.batchIndex, endIndex}}]
-        self.batchIndex = self.batchIndex + self:batchSize()
+function _data:getBatch(i)
+    if i <= self:batchCount() then
+        local batchIndex = (i-1)*self:batchSize()+1
+        local endIndex = math.min(self.indices:size(1), batchIndex+self:batchSize()-1)
+        local batchIndices = self.indices[{{batchIndex, endIndex}}]
 
         self.batch.inputs:index(self.inputs, 1, batchIndices)
         self.batch.targets:index(self.targets, 1, batchIndices)

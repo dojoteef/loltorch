@@ -226,8 +226,8 @@ local function evaluateModel(model, data)
 
     local losses = {}
     local criterion = nn.MSECriterion()
-    while data:hasNextBatch() do
-        local inputs, targets = data:nextBatch()
+    for i=1,data:batchCount() do
+        local inputs, targets = data:getBatch(i)
         local predictions = model:forward(inputs)
         local loss = criterion:forward(predictions, targets)
         table.insert(losses, loss)
@@ -253,11 +253,13 @@ local function trainModel(model, training)
         end,
 
         function ()
+            local data = dataTrain
             local criterion = training.criterion:clone()
             local trainingModel = training.model:clone('weight', 'bias')
             local _, gradients = trainingModel:getParameters()
 
-            function calculateLoss(inputs, targets, outcomes)
+            function calculateLoss(batchIndex)
+                local inputs, targets, outcomes = data:getBatch(batchIndex)
                 gradients:zero()
 
                 local predictions = trainingModel:forward({inputs, targets})
@@ -287,19 +289,16 @@ local function trainModel(model, training)
     model:training()
     training.model:training()
     local parameters = training.model:getParameters()
-    while dataTrain:hasNextBatch() do
-        local inputs, targets, outcomes = dataTrain:nextBatch()
+    for i=1,dataTrain:batchCount() do
         pool:addjob(
-            function(tinputs, ttargets, toutcomes)
-                return calculateLoss(tinputs, ttargets, toutcomes)
+            function(index)
+                return calculateLoss(index)
             end,
             function(loss, gradients)
                 totalLoss = totalLoss + loss
                 optim.sgd(function() return loss, gradients end, parameters, optimState)
             end,
-            inputs:clone(),
-            targets:clone(),
-            outcomes:clone()
+            i
         )
     end
     pool:synchronize()
@@ -313,13 +312,10 @@ local function trainModel(model, training)
 
     if evaluateModel(model, dataValidate) < params.threshold then
         print('reached validation threshold')
+        return true
     end
 
-    dataTrain:resetBatch()
-    dataValidate:resetBatch()
-    collectAllGarbage()
-
-    return model
+    return false
 end
 
 local function errorHandler(model)
