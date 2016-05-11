@@ -8,5 +8,4 @@ fi
 while [ ! -e $1.t7 ]
 do
     th trainbuild.lua -modeltype $1 -model $1.t7 -continue snapshot$1.t7 -snapshot snapshot$1.t7 -threads 8
-    sleep 10
 done

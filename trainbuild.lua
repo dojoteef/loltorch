@@ -241,6 +241,21 @@ local function evaluateModel(model, data)
 end
 
 local function trainModel(model, training)
+    model:training()
+    training.model:training()
+    local parameters = training.model:getParameters()
+
+    local threadClones = {}
+    for _=1,params.threads do
+        local clone = {}
+        clone.criterion = training.criterion:clone()
+        clone.trainingModel = training.model:clone('weight', 'bias')
+        clone.parameters, clone.gradients = training.model:parameters()
+        clone.flatgradients = nn.Module.flatten(clone.gradients)
+
+        table.insert(threadClones, clone)
+    end
+
     threads.serialization('threads.sharedserialize')
     local pool = threads.Threads(
         params.threads,
@@ -252,11 +267,12 @@ local function trainModel(model, training)
             require('TemporalBatchNormalization')
         end,
 
-        function ()
+        function (threadid)
             local data = dataTrain
-            local criterion = training.criterion:clone()
-            local trainingModel = training.model:clone('weight', 'bias')
-            local _, gradients = trainingModel:getParameters()
+            local clone = threadClones[threadid]
+            local criterion = clone.criterion
+            local trainingModel = clone.trainingModel
+            local gradients = clone.flatgradients
 
             function calculateLoss(batchIndex)
                 local inputs, targets, outcomes = data:getBatch(batchIndex)
@@ -286,11 +302,23 @@ local function trainModel(model, training)
 
     print('starting epoch '..epoch..' - timer: '..timer:time().real)
 
-    model:training()
-    training.model:training()
-    local parameters = training.model:getParameters()
+    pool:specific(true)
     for i=1,dataTrain:batchCount() do
+        -- Assign each job to a specific thread and
+        -- synchronize (i.e. wait for completion) for
+        -- all outstanding threads before beginning the
+        -- next batch. This is pedantic, but seems to be
+        -- required for fixing some threading bug I cannot
+        -- seem to figure out. While this is a bit slower
+        -- than not having to synchronize it is SO much
+        -- faster than doing this without threading.
+        local threadid = (i-1)%params.threads+1
+        if threadid == 1 then
+            pool:synchronize()
+        end
+
         pool:addjob(
+            threadid,
             function(index)
                 return calculateLoss(index)
             end,
