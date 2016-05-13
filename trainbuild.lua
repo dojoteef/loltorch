@@ -1,6 +1,6 @@
 local dataset = require('dataset')
 local nn = require('nn')
-local nngraph = require('nngraphshare')
+local nngraph = require('nngraph')
 local optim = require('optim')
 local path = require('pl.path')
 local threads = require('threads')
@@ -16,7 +16,7 @@ cmd:text('Options')
 cmd:option('-batchsize',128,'how many inputs per batch')
 cmd:option('-depth',3,'model has 6*depth+2 layers')
 cmd:option('-epochs',200,'how many epochs to process')
-cmd:option('-seed',1,'manually set the random seed')
+cmd:option('-seed',torch.initialSeed(),'manually set the random seed')
 cmd:option('-datadir','dataset','the directory where the dataset is located')
 cmd:option('-snapshot','snapshot.t7','where to save snapshots of the in training model')
 cmd:option('-model','model.t7','where to save the final model')
@@ -42,7 +42,7 @@ local function collectAllGarbage()
     end
 end
 
-
+torch.manualSeed(params.seed)
 local dataLoader = dataset.Loader(params.datadir, 8, 1, 1)
 local dataTrain, dataValidate, dataTest = dataLoader:load(params.batchsize)
 
@@ -69,7 +69,7 @@ local function getTrainingModel(input)
     model.verbose = params.verbose
 
     local criterion = nn.ParallelCriterion(true)
-    for _=1,dataTrain.targets:size(2) do
+    for _=1,numElements do
         local mse = nn.MSETableCriterion()
         local cosine = nn.CosineEmbeddingCriterion(0.5)
 
@@ -77,7 +77,7 @@ local function getTrainingModel(input)
         multi:add(cosine)
         multi:add(mse, 0.5)
 
-        criterion:add(multi)
+        criterion:add(multi, 1/numElements)
     end
 
     local optimState = {
@@ -243,18 +243,7 @@ end
 local function trainModel(model, training)
     model:training()
     training.model:training()
-    local parameters = training.model:getParameters()
-
-    local threadClones = {}
-    for _=1,params.threads do
-        local clone = {}
-        clone.criterion = training.criterion:clone()
-        clone.trainingModel = training.model:clone('weight', 'bias')
-        clone.parameters, clone.gradients = training.model:parameters()
-        clone.flatgradients = nn.Module.flatten(clone.gradients)
-
-        table.insert(threadClones, clone)
-    end
+    local parameters, gradients = training.model:getParameters()
 
     threads.serialization('threads.sharedserialize')
     local pool = threads.Threads(
@@ -262,28 +251,32 @@ local function trainModel(model, training)
         function ()
             require('dataset')
             require('nn')
-            require('nngraphshare')
+            require('nngraph')
             require('MSETableCriterion')
             require('TemporalBatchNormalization')
         end,
 
-        function (threadid)
+        function ()
             local data = dataTrain
-            local clone = threadClones[threadid]
-            local criterion = clone.criterion
-            local trainingModel = clone.trainingModel
-            local gradients = clone.flatgradients
+            local criterion = training.criterion:clone()
+            local trainingModel = training.model:clone('weight', 'bias')
+            local _, trainingGradients = trainingModel:parameters()
+            trainingGradients = trainingModel.flatten(trainingGradients)
 
-            function calculateLoss(batchIndex)
+            -- Get around the luacheck warning about setting non-standard global
+            -- since this paradigm is required by the threading library
+            _G['calculateLoss'] = function(batchIndex)
+                trainingGradients:zero()
+
                 local inputs, targets, outcomes = data:getBatch(batchIndex)
-                gradients:zero()
+                local modelInput = {inputs, targets}
 
-                local predictions = trainingModel:forward({inputs, targets})
+                local predictions = trainingModel:forward(modelInput)
                 local loss = criterion:forward(predictions, outcomes)
                 local dloss_dw = criterion:backward(predictions, outcomes)
-                trainingModel:backward(inputs, dloss_dw)
+                trainingModel:backward(modelInput, dloss_dw)
 
-                return loss, gradients
+                return loss, trainingGradients
             end
         end
     )
@@ -302,28 +295,16 @@ local function trainModel(model, training)
 
     print('starting epoch '..epoch..' - timer: '..timer:time().real)
 
-    pool:specific(true)
     for i=1,dataTrain:batchCount() do
-        -- Assign each job to a specific thread and
-        -- synchronize (i.e. wait for completion) for
-        -- all outstanding threads before beginning the
-        -- next batch. This is pedantic, but seems to be
-        -- required for fixing some threading bug I cannot
-        -- seem to figure out. While this is a bit slower
-        -- than not having to synchronize it is SO much
-        -- faster than doing this without threading.
-        local threadid = (i-1)%params.threads+1
-        if threadid == 1 then
-            pool:synchronize()
-        end
-
         pool:addjob(
-            threadid,
             function(index)
-                return calculateLoss(index)
+                -- Get around the luacheck warning about setting non-standard global
+                -- since this paradigm is required by the threading library
+                return _G['calculateLoss'](index)
             end,
-            function(loss, gradients)
+            function(loss, threadGradients)
                 totalLoss = totalLoss + loss
+                gradients:copy(threadGradients)
                 optim.sgd(function() return loss, gradients end, parameters, optimState)
             end,
             i
@@ -370,7 +351,7 @@ end
 
 collectAllGarbage()
 local model, training = getModel()
-local ok, errmsg = xpcall(trainModel, errorHandler(model), model, training)
+local ok, errmsg = xpcall(trainModel, errorHandler(training.model), model, training)
 if not ok then
     print('training failed!')
 

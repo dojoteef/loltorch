@@ -216,21 +216,8 @@ function _data:__init(inputs, targets, outcomes, batchsize, onlywins)
     self.targets = targets
     self.outcomes = outcomes
 
-    local inputSize = self.inputs:size():totable()
-    inputSize[1] = batchsize
-
-    local targetSize = self.targets:size():totable()
-    targetSize[1] = batchsize
-
-    local inputType = torch.factory(inputs:type())
-    local targetType = torch.factory(targets:type())
-    local outcomeType = torch.factory(outcomes:type())
-
-    self.batch = {
-        inputs=inputType():resize(unpack(inputSize)):zero(),
-        targets=targetType():resize(unpack(targetSize)):zero(),
-        outcomes=outcomeType():resize(batchsize):fill(1)
-    }
+    self.batch = {}
+    self.batchSize = batchsize
 
     self:resetBatch()
 end
@@ -243,29 +230,51 @@ function _data:size()
     return self.inputs:size(1)
 end
 
-function _data:batchSize()
-    return self.batch.inputs:size(1)
-end
-
 function _data:batchCount()
-    return self:size()/self:batchSize()
+    return self:size()/self.batchSize
 end
 
 function _data:resetBatch()
     self.indices =  torch.randperm(self.inputs:size(1)):long()
 end
 
-function _data:getBatch(i)
+function _data:batchForId(id)
+    local batch = self.batch[id]
+    if not batch then
+        local inputSize = self.inputs:size():totable()
+        inputSize[1] = self.batchSize
+
+        local targetSize = self.targets:size():totable()
+        targetSize[1] = self.batchSize
+
+        local inputType = torch.factory(self.inputs:type())
+        local targetType = torch.factory(self.targets:type())
+        local outcomeType = torch.factory(self.outcomes:type())
+
+        batch = {
+            inputs=inputType():resize(unpack(inputSize)):zero(),
+            targets=targetType():resize(unpack(targetSize)):zero(),
+            outcomes=outcomeType():resize(self.batchSize):fill(1)
+        }
+
+        self.batch[id] = batch
+    end
+
+    return batch
+end
+
+function _data:getBatch(i, id)
     if i <= self:batchCount() then
-        local batchIndex = (i-1)*self:batchSize()+1
-        local endIndex = math.min(self.indices:size(1), batchIndex+self:batchSize()-1)
+        local batchIndex = (i-1)*self.batchSize+1
+        local endIndex = math.min(self.indices:size(1), batchIndex+self.batchSize-1)
         local batchIndices = self.indices[{{batchIndex, endIndex}}]
 
-        self.batch.inputs:index(self.inputs, 1, batchIndices)
-        self.batch.targets:index(self.targets, 1, batchIndices)
-        self.batch.outcomes:index(self.outcomes, 1, batchIndices)
+        local batch = self:batchForId(id or 1)
+        batch.inputs:index(self.inputs, 1, batchIndices)
+        batch.targets:index(self.targets, 1, batchIndices)
+        batch.outcomes:index(self.outcomes, 1, batchIndices)
 
-        return self.batch.inputs, self.batch.targets, self.batch.outcomes
+        return batch.inputs, batch.targets, batch.outcomes
     end
 end
 
