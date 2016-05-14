@@ -74,7 +74,7 @@ local function getTrainingModel(input)
         local cosine = nn.CosineEmbeddingCriterion(0.5)
 
         local multi = nn.MultiCriterion()
-        multi:add(cosine)
+        multi:add(cosine, 0.5)
         multi:add(mse, 0.5)
 
         criterion:add(multi, 1/numElements)
@@ -85,9 +85,10 @@ local function getTrainingModel(input)
         dampening = 0,
         nesterov = true,
         regime = {
-            [1]={learningRate=1e-2,weightDecay=1e-4},
-            [80]={learningRate=1e-3},
-            [120]={learningRate=1e-4,weightDecay=0},
+            [1]={learningRate=1e-1,weightDecay=1e-4},
+            [10]={learningRate=5e-2,weightDecay=1e-4},
+            [80]={learningRate=1e-2},
+            [120]={learningRate=1e-3,weightDecay=0},
         }
     }
 
@@ -183,7 +184,6 @@ local function getMLPModel()
     model = inputView(model)
 
     model = nn.Linear(features*16, hidden)(model)
-    model = nn.ReLU(true)(model)
 
     local targetSize = torch.LongTensor(dataTrain.targets:size())
     targetSize = targetSize[{{2, targetSize:size()[1]}}]
