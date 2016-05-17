@@ -32,7 +32,7 @@ local function generateShuffledCorpus(groupings, corpus)
     -- to treat the elements of the same group as reasonably similar.
     for _,group in pairs(groupings) do
         if #group > 1 then
-            for _=1,math.ceil(math.log(#group), 2) do
+            for _=1,math.ceil(math.log(#group, 2)) do
                 local indices = torch.randperm(#group)
                 for i=1,#group do
                     local groupId = group[indices[i]]
@@ -42,6 +42,45 @@ local function generateShuffledCorpus(groupings, corpus)
             end
         end
     end
+end
+
+local function generateSubCategories(category)
+    --------------------------------------------------------------
+    -- This function is a bit complex, so here's an example of the sub
+    -- categories given the following category:
+    --
+    -- 'rFlatHPPoolModPerLevel' - Flat, HPPool, HP, Pool, PerLevel
+    --------------------------------------------------------------
+
+    -- Remove any leading 'r'
+    category = string.match(category, 'r?(.*)')
+
+    -- Remove usage of the word 'Mod'
+    local before, after = string.match(category, '(.*)Mod(.*)')
+    if before then
+        category = string.format('%s%s', before, after or '')
+    end
+
+    local categories = {}
+    local auxillaryCategories = {Flat=true, Percent=true, PerLevel=false}
+    for cat, starting in pairs(auxillaryCategories) do
+        local matchStart, matchEnd = string.find(category, cat)
+        if matchStart then
+            table.insert(categories, string.lower(cat))
+            category = starting and string.sub(category, matchEnd+1) or string.sub(category, matchStart, matchEnd)
+        end
+    end
+
+    -- Treat the remaining string as a category of it's own
+    table.insert(categories, string.lower(category))
+
+    -- Treat each sub word as a category
+    local matches = string.gmatch(category, 'r?(%u+[%d%l]*)')
+    for w in matches do
+        table.insert(categories, string.lower(w))
+    end
+
+    return categories
 end
 
 local function generateTreeCorpus(trees, corpus)
@@ -107,7 +146,7 @@ local function generateMasteryCorpus(datadir, corpus)
     generateTreeCorpus(trees, corpus)
 end
 
-local function generateRuneCorpus(datadir, corpus)
+local function generateRuneCorpus(datadir, runeCategories)
     print('generating rune corpus...')
     local runeFile = datadir..path.sep..'runes.json'
     local data = file.read(runeFile)
@@ -116,22 +155,25 @@ local function generateRuneCorpus(datadir, corpus)
         error('Unable to load: '..runeFile)
     end
 
-    local runeCategories = {}
     for _, rune in pairs(runeInfo.data) do
         local runeId = 'rune'..rune.id
         if rune.tags then
             for _, tag in ipairs(rune.tags) do
-                local tagCategory = runeCategories[tag] or {}
-                table.insert(tagCategory, runeId)
-                runeCategories[tag] = tagCategory
+                for _, category in ipairs(generateSubCategories(tag)) do
+                    local tagCategory = runeCategories[category] or {}
+                    table.insert(tagCategory, runeId)
+                    runeCategories[category] = tagCategory
+                end
             end
         end
 
         if rune.stats then
             for stat in pairs(rune.stats) do
-                local statCategory = runeCategories[stat] or {}
-                table.insert(statCategory, runeId)
-                runeCategories[stat] = statCategory
+                for _, category in ipairs(generateSubCategories(stat)) do
+                    local statCategory = runeCategories[category] or {}
+                    table.insert(statCategory, runeId)
+                    runeCategories[category] = statCategory
+                end
             end
         end
 
@@ -147,11 +189,9 @@ local function generateRuneCorpus(datadir, corpus)
             runeCategories[typeCategory] = runeType
         end
     end
-
-    generateShuffledCorpus(runeCategories, corpus)
 end
 
-local function generateItemCorpus(datadir, corpus)
+local function generateItemCorpus(datadir, itemCategories)
     print('generating item corpus...')
     local itemFile = datadir..path.sep..'items.json'
     local data = file.read(itemFile)
@@ -170,7 +210,6 @@ local function generateItemCorpus(datadir, corpus)
     end
 
     local itemTrees = {}
-    local itemCategories = {}
     for _, item in pairs(itemInfo.data) do
         local itemId = 'item'..item.id
         itemTrees[itemId] = graph.Node(itemId)
@@ -184,28 +223,32 @@ local function generateItemCorpus(datadir, corpus)
                     itemCategories[metaTag] = metaTagCategory
                 end
 
-                local tagCategory = itemCategories[tag] or {}
-                table.insert(tagCategory, itemId)
-                itemCategories[tag] = tagCategory
+                for _, category in ipairs(generateSubCategories(tag)) do
+                    local tagCategory = itemCategories[category] or {}
+                    table.insert(tagCategory, itemId)
+                    itemCategories[category] = tagCategory
+                end
             end
         end
 
         if item.stats then
             for stat in pairs(item.stats) do
-                local statCategory = itemCategories[stat] or {}
-                table.insert(statCategory, itemId)
-                itemCategories[stat] = statCategory
+                for _, category in ipairs(generateSubCategories(stat)) do
+                    local statCategory = itemCategories[category] or {}
+                    table.insert(statCategory, itemId)
+                    itemCategories[category] = statCategory
+                end
             end
         end
 
         if item.group then
-            local group = itemCategories[item.group] or {}
-            table.insert(group, itemId)
-            itemCategories[item.group] = group
+            for _, category in ipairs(generateSubCategories(item.group)) do
+                local group = itemCategories[category] or {}
+                table.insert(group, itemId)
+                itemCategories[category] = group
+            end
         end
     end
-
-    generateShuffledCorpus(itemCategories, corpus)
 
     for _, item in pairs(itemInfo.data) do
         local itemId = 'item'..item.id
@@ -216,8 +259,6 @@ local function generateItemCorpus(datadir, corpus)
             end
         end
     end
-
-    generateTreeCorpus(itemTrees, corpus)
 end
 
 local function generateChampionCorpus(datadir, corpus)
@@ -241,6 +282,7 @@ local function generateChampionCorpus(datadir, corpus)
         end
     end
 
+    print('Champion categories: ')
     generateShuffledCorpus(championCategories, corpus)
 end
 
@@ -288,18 +330,19 @@ end
 local function generateCorpus(datadir, outfile)
     local timer = torch.Timer()
     local corpus = io.open(datadir..path.sep..outfile, 'w')
+    local categories = {}
 
     print('timer: ', timer:time().real)
     generateMasteryCorpus(params.datadir, corpus)
 
     print('timer: ', timer:time().real)
-    generateRuneCorpus(params.datadir, corpus)
+    generateRuneCorpus(params.datadir, categories)
 
     print('timer: ', timer:time().real)
-    generateItemCorpus(params.datadir, corpus)
+    generateItemCorpus(params.datadir, categories)
 
     print('timer: ', timer:time().real)
-    generateChampionCorpus(params.datadir, corpus)
+    generateChampionCorpus(params.datadir, corpus, categories)
 
     print('timer: ', timer:time().real)
     generateSpellCorpus(params.datadir, corpus)
@@ -307,6 +350,7 @@ local function generateCorpus(datadir, outfile)
     print('timer: ', timer:time().real)
     generateVersionCorpus(params.datadir, corpus)
 
+    generateShuffledCorpus(categories, corpus) --categories
     generateShuffledCorpus({{'DUO', 'NONE', 'SOLO', 'DUO_CARRY', 'DUO_SUPPORT'}}, corpus) --roles
     generateShuffledCorpus({{'MID', 'TOP', 'JUNGLE', 'BOT'}}, corpus) --lanes
     generateShuffledCorpus({tablex.keys(lol.api.Regions)}, corpus) --regions

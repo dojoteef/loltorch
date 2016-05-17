@@ -224,17 +224,16 @@ local function evaluateModel(model, data)
     print('Evaluating...')
     model:evaluate()
 
-    local losses = {}
+    local totalLoss = 0
     local criterion = nn.MSECriterion()
     for i=1,data:batchCount() do
         local inputs, targets = data:getBatch(i)
         local predictions = model:forward(inputs)
         local loss = criterion:forward(predictions, targets)
-        table.insert(losses, loss)
+        totalLoss = totalLoss + loss
     end
 
-    losses = torch.Tensor(losses)
-    local loss = torch.sum(losses)/torch.numel(losses)
+    local loss = totalLoss/data:batchCount()
     print('loss: '..loss)
 
     return math.abs(loss)
@@ -312,7 +311,7 @@ local function trainModel(model, training)
     end
     pool:synchronize()
 
-    print('training loss: '..totalLoss/dataTrain:size()..' - timer: '..timer:time().real)
+    print('training loss: '..totalLoss/dataTrain:batchCount()..' - timer: '..timer:time().real)
 
     -- just finished the current epoch so we should start on
     -- the next epoch for the snapshot
