@@ -1,5 +1,7 @@
+local cjson = require('cjson')
 local dataset = require('dataset')
 local dir = require('pl.dir')
+local file = require('pl.file')
 local path = require('pl.path')
 local threads = require('threads')
 local tablex = require('pl.tablex')
@@ -32,73 +34,171 @@ local function getLane(lane)
 end
 
 local function getChampionId(participant)
-    return 'champion'..participant.championId
+    return 'c'..participant.championId
 end
 
 local function getSpellId(participant, index)
-    return 'spell'..participant['spell'..index..'Id']
+    return 's'..participant['spell'..index..'Id']
 end
 
 local function getRuneId(rune)
-    return 'rune'..rune.runeId
+    return 'r'..rune.runeId
 end
 
 local function getMasteryId(mastery)
-    return 'mastery'..mastery.masteryId
+    return 'm'..mastery.masteryId
 end
 
 local function getItemId(itemId)
-    return 'item'..itemId
+    return 'i'..itemId
 end
 
+local function clearTable(t)
+    for i=1, #t do
+        t[i] = nil
+    end
+
+    for _,v in pairs(t) do
+        if type(v) == 'table' then
+            clearTable(v)
+        end
+    end
+end
+
+local spells = {}
 local function addSpells(embeddings, participant, target, offset)
+    clearTable(spells)
+
     for i=1, dataset.maxSpellCount do
         local spellId = participant['spell'..i..'Id']
         if spellId then
-            target[i+offset] = embeddings[getSpellId(participant, i)]
+            table.insert(spells, spellId)
         end
+    end
+
+    -- sort spells so they are in a consistent ordering
+    table.sort(spells)
+
+    for i=1,#spells do
+        target[i+offset] = embeddings['s'..spells[i]]
     end
 
     return offset+dataset.maxSpellCount
 end
 
+local items = {}
 local function addItems(embeddings, stats, target, offset)
+    clearTable(items)
+
     for i=0, dataset.maxItemCount-1 do
         local itemId = stats['item'..i]
         if itemId and itemId > 0 then
-            target[i+offset] = embeddings[getItemId(itemId)]
+            table.insert(items, itemId)
         end
+    end
+
+    -- sort items so they are in a consistent ordering
+    table.sort(items)
+
+    for i=1,#items do
+        target[i+offset] = embeddings[getItemId(items[i])]
     end
 
     return offset+dataset.maxItemCount
 end
 
-local function addRunes(embeddings, participant, target, offset)
+local runes = {glyph={max=9},mark={max=9},seal={max=9},quintessence={max=3}}
+local function addRunes(embeddings, participant, target, offset, runeTypes)
     if participant.runes then
-        local i = 1
+        clearTable(runes)
+
         for _,rune in ipairs(participant.runes) do
-            for _=1, rune.rank do
-                target[i+offset] = embeddings[getRuneId(rune)]
-                i = i + 1
+            local runeType = runeTypes[rune.runeId]
+            table.insert(runes[runeType], rune)
+        end
+
+        local i = 1
+        for _, runeType in ipairs({'glyph','mark','seal','quintessence'}) do
+            -- sort runes so they are in a consistent ordering
+            local runeList = runes[runeType]
+            table.sort(runeList, function(r1, r2) return r1.runeId < r2.runeId end)
+
+            local start = i
+            for _,rune in ipairs(runeList) do
+                for _=1, rune.rank do
+                    target[i+offset] = embeddings[getRuneId(rune)]
+                    i = i + 1
+                end
             end
+
+            i = start + runeList.max
         end
     end
 
     return offset+dataset.maxRuneCount
 end
 
-local function addMasteries(embeddings, participant, target, offset)
+local masteries = {Ferocity={},Resolve={},Cunning={}}
+local function addMasteries(embeddings, participant, target, offset, masteryTypes)
     if participant.masteries then
+        clearTable(masteries)
+
         local i = 1
         for _,mastery in ipairs(participant.masteries) do
-            for _=1, mastery.rank do
-                target[i+offset] = embeddings[getMasteryId(mastery)]
-                i = i + 1
+            local masteryType = masteryTypes[mastery.masteryId]
+            table.insert(masteries[masteryType], mastery)
+        end
+
+        for _, masteryType in pairs(masteries) do
+            -- sort masteries so they are in a consistent ordering
+            table.sort(masteryType, function(m1, m2) return m1.masteryId < m2.masteryId end)
+
+            for _,mastery in ipairs(masteryType) do
+                for _=1, mastery.rank do
+                    target[i+offset] = embeddings[getMasteryId(mastery)]
+                    i = i + 1
+                end
             end
         end
     end
 
     return offset+dataset.maxMasteryCount
+end
+
+local function getRuneTypes(datadir)
+    local runeFile = path.join(datadir, 'runes.json')
+    local data = file.read(runeFile)
+    local ok,runeInfo = pcall(function() return cjson.decode(data) end)
+    if not ok then
+        error('Unable to load: '..runeFile)
+    end
+
+    local runeTypes = {}
+    for _,rune in pairs(runeInfo.data) do
+        for _,tag in ipairs(rune.tags) do
+            if runes[tag] then
+                runeTypes[rune.id] = tag
+            end
+        end
+    end
+
+    return runeTypes
+end
+
+local function getMasteryTypes(datadir)
+    local masteryFile = path.join(datadir, 'masteries.json')
+    local data = file.read(masteryFile)
+    local ok,masteryInfo = pcall(function() return cjson.decode(data) end)
+    if not ok then
+        error('Unable to load: '..masteryFile)
+    end
+
+    local masteryTypes = {}
+    for _,mastery in pairs(masteryInfo.data) do
+        masteryTypes[mastery.id] = mastery.masteryTree
+    end
+
+    return masteryTypes
 end
 
 local function validParticipant(participant)
@@ -164,7 +264,6 @@ local function verifyMatches(matchlist, embeddings)
         function()
             _G['cjson'] = require('cjson')
             _G['file'] = require('pl.file')
-            _G['tablex'] = require('pl.tablex')
         end
     )
 
@@ -196,7 +295,7 @@ local function verifyMatches(matchlist, embeddings)
                 return invalidMatches
             end,
             function(invalidMatches)
-                invalidMatchList = _G['tablex'].merge(invalidMatchList, invalidMatches, true)
+                invalidMatchList = tablex.merge(invalidMatchList, invalidMatches, true)
             end,
             matchesForThread(i, matchlist)
         )
@@ -207,7 +306,7 @@ local function verifyMatches(matchlist, embeddings)
     return invalidMatchList, participantsPerThread
 end
 
-local function processMatches(matchlist, invalidMatches, participantsPerThread, embeddings)
+local function processMatches(matchlist, invalidMatches, participantsPerThread, embeddings, datadir)
     local _,embedding = next(embeddings)
     local embeddingSize = embedding:size(1)
 
@@ -225,9 +324,12 @@ local function processMatches(matchlist, invalidMatches, participantsPerThread, 
         function()
             _G['cjson'] = require('cjson')
             _G['file'] = require('pl.file')
+            _G['path'] = require('pl.path')
         end
     )
 
+    local runeTypes = getRuneTypes(datadir)
+    local masteryTypes = getMasteryTypes(datadir)
     for i=1,params.threads do
         pool:addjob(
             function(matches)
@@ -266,8 +368,8 @@ local function processMatches(matchlist, invalidMatches, participantsPerThread, 
                                     local offset = 0
                                     offset = addSpells(embeddings, participant, target, offset)
                                     offset = addItems(embeddings, participant.stats, target, offset)
-                                    offset = addRunes(embeddings, participant, target, offset)
-                                    addMasteries(embeddings, participant, target, offset)
+                                    offset = addRunes(embeddings, participant, target, offset, runeTypes)
+                                    addMasteries(embeddings, participant, target, offset, masteryTypes)
 
                                     dataIndex = dataIndex + 1
                                 end
@@ -293,7 +395,7 @@ local function matchesToTensor(matchdir, datadir)
 
     print('timer: ', timer:time().real)
     print('verify matches...')
-    local embeddings = torch.load(datadir..path.sep..'embeddings.t7')
+    local embeddings = torch.load(path.join(datadir, 'embeddings.t7'))
     local matchlist = dir.getallfiles(matchdir, '*.json')
     local invalidMatches, participantsPerThread = verifyMatches(matchlist, embeddings)
 
@@ -301,14 +403,25 @@ local function matchesToTensor(matchdir, datadir)
 
     print('timer: ', timer:time().real)
     print('process matches...')
-    local inputs, targets, outcomes = processMatches(matchlist, invalidMatches, participantsPerThread, embeddings)
+    local inputs, targets, outcomes = processMatches(matchlist, invalidMatches, participantsPerThread, embeddings, datadir)
 
     print('saving tensors...')
-    torch.save(datadir..path.sep..'inputs.t7', inputs)
-    torch.save(datadir..path.sep..'targets.t7', targets)
-    torch.save(datadir..path.sep..'outcomes.t7', outcomes)
+    torch.save(path.join(datadir,'inputs.t7'), inputs)
+    torch.save(path.join(datadir,'targets.t7'), targets)
+    torch.save(path.join(datadir,'outcomes.t7'), outcomes)
 
     print('done in time (seconds): ', timer:time().real)
 end
 
-matchesToTensor(params.matchdir, params.datadir)
+local function errorHandler(errmsg)
+    errmsg = errmsg..'\n'..debug.traceback()
+    print(errmsg)
+end
+
+local ok, errmsg = xpcall(matchesToTensor, errorHandler, params.matchdir, params.datadir)
+if not ok then
+    print('Failed to process matches!')
+
+    print(errmsg)
+    os.exit()
+end

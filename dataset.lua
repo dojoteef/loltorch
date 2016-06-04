@@ -73,7 +73,7 @@ function _loader:tensorType()
     return torch.type(self.inputs)
 end
 
-function _loader:load(batchsize)
+function _loader:load(batchsize, seed)
     local inputs = torch.load(self.dir..path.sep..'inputs.t7')
     local targets = torch.load(self.dir..path.sep..'targets.t7')
     local outcomes = torch.load(self.dir..path.sep..'outcomes.t7')
@@ -81,6 +81,14 @@ function _loader:load(batchsize)
     assert(inputs:size(1) == targets:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), target size ('..targets:size(1)..')')
     assert(inputs:size(1) == outcomes:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), outcome size ('..outcomes:size(1)..')')
 
+    -- Create a random number generator specifically for randomly permuting
+    -- the data so that we can ensure we do it the same if continuing training.
+    local generator = torch.Generator()
+    if seed then
+        torch.manualSeed(generator, seed)
+    end
+
+    -- Make sure new tensors we create a compatible with the tensor we expect
     torch.setdefaulttensortype(torch.type(inputs))
 
     local count = inputs:size(1)
@@ -89,26 +97,26 @@ function _loader:load(batchsize)
 
     local indices = torch.randperm(inputs:size(1)):long()
     local view = indices[{{1, trainIndex}}]
-    local trainData = dataset.Data(inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize)
+    local trainData = dataset.Data(inputs, targets, outcomes, view, batchsize)
 
     view = indices[{{trainIndex+1, validateIndex}}]
-    local validateData = dataset.Data(inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize, true)
+    local validateData = dataset.Data(inputs, targets, outcomes, view, batchsize, true)
 
     view = indices[{{validateIndex+1, count}}]
-    local testData = dataset.Data(inputs:index(1, view), targets:index(1, view), outcomes:index(1, view), batchsize, true)
+    local testData = dataset.Data(inputs, targets, outcomes, view, batchsize, true)
 
-    return trainData, validateData, testData
+    return {train=trainData, validate=validateData, test=testData, seed=torch.initialSeed(generator)}
 end
 
 function _loader:getDataByType(vector, targetType)
     -- Use cosine similarity to determine closest
     local closestId
     local closestSimilarity = -1
-    local vectorNorm = torch.norm(vector)
+    local vectorNorm = vector:norm()
     for id,embedding in pairs(self.embeddings) do
         local _,_, embeddingType = string.find(id, '^(%a+)')
-        if embeddingType == targetType then
-            local similarity = vector:dot(embedding)/(vectorNorm * torch.norm(embedding))
+        if embeddingType == string.sub(targetType, 1, 1) then
+            local similarity = vector:dot(embedding)/(vectorNorm * embedding:norm())
             if similarity >= closestSimilarity then
                 closestId = id
                 closestSimilarity = similarity
@@ -149,7 +157,7 @@ function _loader:getChampionVector(champion)
     end
 
     assert(championId, 'Could not find champion: '..champion)
-    return self.embeddings['champion'..championId]
+    return self.embeddings['c'..championId]
 end
 
 function _loader:getLaneVector(lane)
@@ -172,7 +180,7 @@ function _loader:getTierVector(tier)
     return self.embeddings[tier]
 end
 
-function _loader:sample(model, input, threshold)
+function _loader:sample(model, input)
     local targetTypes = {
         {count=dataset.maxSpellCount,type='spell'},
         {count=dataset.maxItemCount,type='item'},
@@ -180,8 +188,10 @@ function _loader:sample(model, input, threshold)
         {count=dataset.maxMasteryCount,type='mastery'},
     }
 
+    local output = {}
     local startIndex
     local endIndex = 0
+
     local prediction = model:forward(input)
     for _,targetType in ipairs(targetTypes) do
         startIndex = endIndex+1
@@ -190,31 +200,40 @@ function _loader:sample(model, input, threshold)
         local slice = prediction[{{startIndex,endIndex}}]
         for j=1,slice:size(1) do
             local name, confidence = self:getDataByType(slice[j], targetType.type)
-            if name and confidence > threshold then
-                print('datatype: '..targetType.type..', name: '..name..', confidence: '..confidence)
+            if name then
+                table.insert(output, {name=name, datatype=targetType.type, confidence=confidence})
             end
         end
     end
+
+    return output
 end
 
-function _data:__init(inputs, targets, outcomes, batchsize, onlywins)
+function _data:__init(inputs, targets, outcomes, indices, batchsize, onlywins)
     if onlywins then
-        local j = 1
-        local wins = torch.LongTensor(outcomes[torch.eq(outcomes,1)]:size(1))
-        for i=1,outcomes:size(1) do
-            if outcomes[i] == 1 then
-                wins[j] = i
-                j = j + 1
+        local winCount = 0
+        for i=1,indices:size(1) do
+            if outcomes[indices[i]] == 1 then
+                winCount = winCount + 1
             end
         end
-        inputs = inputs:index(1, wins)
-        targets = targets:index(1, wins)
-        outcomes = outcomes:index(1, wins)
+
+        local j = 0
+        local wins = torch.LongTensor(winCount)
+        for i=1,indices:size(1) do
+            if outcomes[indices[i]] == 1 then
+                j = j + 1
+                wins[j] = i
+            end
+        end
+
+        indices = wins
     end
 
     self.inputs = inputs
     self.targets = targets
     self.outcomes = outcomes
+    self.indices = indices
 
     self.batch = {}
     self.batchSize = batchsize
@@ -227,7 +246,7 @@ function _data:tensorType()
 end
 
 function _data:size()
-    return self.inputs:size(1)
+    return self.indices:size(1)
 end
 
 function _data:batchCount()
@@ -235,7 +254,8 @@ function _data:batchCount()
 end
 
 function _data:resetBatch()
-    self.indices =  torch.randperm(self.inputs:size(1)):long()
+    local perm = torch.randperm(self.indices:size(1)):long()
+    self.indices = self.indices:indexCopy(1, perm, self.indices)
 end
 
 function _data:batchForId(id)

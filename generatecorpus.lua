@@ -1,14 +1,10 @@
--- Since graph package doesn't return the table graph
--- create a fake global one to get rid of 'accessing
--- undefined variable' warning
-graph = {}
-require('graph')
-
 local cjson = require('cjson')
 local dataset = require('dataset')
+local dir = require('pl.dir')
 local file = require('pl.file')
 local lol = require('lol')
 local path = require('pl.path')
+local threads = require('threads')
 local tablex = require('pl.tablex')
 local torch = require('torch')
 
@@ -17,346 +13,378 @@ cmd:text()
 cmd:text('Generate a corpus from League of Legends data')
 cmd:text()
 cmd:text('Options')
-cmd:option('-datadir','dataset','the directory where the data is stored')
+cmd:option('-matchdir','matches','the directory where the matches are located')
+cmd:option('-datadir','dataset','the directory where to store the serialized dataset')
+cmd:option('-threads',1,'the number of threads to use when processing the dataset')
+cmd:option('-progress',100000,'display a progress update after x number of participants being processed')
 cmd:option('-outfile','corpus.txt','the name of the output file which has the corpus')
 cmd:text()
 
 -- parse input params
 local params = cmd:parse(arg)
 
-local function generateShuffledCorpus(groupings, corpus)
-    -- Since the groupings are sets where order doesn't matter
-    -- do 'n' random permutations where 'n' is based on the size
-    -- of the category. This isn't perfect, but should give a
-    -- reasonable distribution that allows the embedding window
-    -- to treat the elements of the same group as reasonably similar.
-    for _,group in pairs(groupings) do
-        if #group > 1 then
-            for _=1,math.ceil(math.log(#group, 2)) do
-                local indices = torch.randperm(#group)
-                for i=1,#group do
-                    local groupId = group[indices[i]]
-                    corpus:write(groupId..' ')
-                end
-                corpus:write('\n')
-            end
-        end
+-- Normalize on one representation for lane
+local function getLane(lane)
+    if lane == 'MIDDLE' then
+        return 'MID'
+    elseif lane == 'BOTTOM' then
+        return 'BOT'
+    else
+        return lane
     end
 end
 
-local function generateSubCategories(category)
-    --------------------------------------------------------------
-    -- This function is a bit complex, so here's an example of the sub
-    -- categories given the following category:
-    --
-    -- 'rFlatHPPoolModPerLevel' - Flat, HPPool, HP, Pool, PerLevel
-    --------------------------------------------------------------
-
-    -- Remove any leading 'r'
-    category = string.match(category, 'r?(.*)')
-
-    -- Remove usage of the word 'Mod'
-    local before, after = string.match(category, '(.*)Mod(.*)')
-    if before then
-        category = string.format('%s%s', before, after or '')
-    end
-
-    local categories = {}
-    local auxillaryCategories = {Flat=true, Percent=true, PerLevel=false}
-    for cat, starting in pairs(auxillaryCategories) do
-        local matchStart, matchEnd = string.find(category, cat)
-        if matchStart then
-            table.insert(categories, string.lower(cat))
-            category = starting and string.sub(category, matchEnd+1) or string.sub(category, matchStart, matchEnd)
-        end
-    end
-
-    -- Treat the remaining string as a category of it's own
-    table.insert(categories, string.lower(category))
-
-    -- Treat each sub word as a category
-    local matches = string.gmatch(category, 'r?(%u+[%d%l]*)')
-    for w in matches do
-        table.insert(categories, string.lower(w))
-    end
-
-    return categories
-end
-
-local function generateTreeCorpus(trees, corpus)
-    local lastNode, skipped
-    local function printTree(node)
-        if lastNode == node and #node.children <= 1 then
-            skipped = true
-        else
-            corpus:write(node:label()..' ')
-        end
-        lastNode = node
-    end
-
-    for _, tree in ipairs(trees) do
-        skipped = false
-        lastNode = tree
-        tree:dfs(printTree)
-
-        if not skipped then
-            corpus:write('\n')
-        end
-
-        skipped = false
-        lastNode = tree
-        tree:bfs(printTree)
-
-        if not skipped then
-            corpus:write('\n')
-        end
-    end
-end
-
-local function generateMasteryCorpus(datadir, corpus)
-    print('generating mastery corpus...')
-    local masteryFile = datadir..path.sep..'masteries.json'
-    local data = file.read(masteryFile)
-    local ok,masteryInfo = pcall(function() return cjson.decode(data) end)
+local function getFeatures(datadir, filename, prefix, features)
+    local featureFile = path.join(datadir, filename)
+    local data = file.read(featureFile)
+    local ok,info = pcall(function() return cjson.decode(data) end)
     if not ok then
-        error('Unable to load: '..masteryFile)
+        error('Unable to load: '..featureFile)
     end
 
-    local trees = {}
-    for _, tree in pairs(masteryInfo.tree) do
-        local nodes = {}
-        local childNodes = {}
-        for i=#tree,1,-1 do
-            local treeItems = tree[i].masteryTreeItems
-            for _,treeItem in ipairs(treeItems) do
-                if treeItem ~= cjson.null then
-                    local node = graph.Node('mastery'..treeItem.masteryId)
-                    for _,child in ipairs(childNodes) do
-                        node:add(child)
-                    end
-                    table.insert(trees, node)
-                    table.insert(nodes, node)
-                end
-            end
-            childNodes = nodes
-            nodes = {}
-        end
-    end
-
-    generateTreeCorpus(trees, corpus)
-end
-
-local function generateRuneCorpus(datadir, runeCategories)
-    print('generating rune corpus...')
-    local runeFile = datadir..path.sep..'runes.json'
-    local data = file.read(runeFile)
-    local ok,runeInfo = pcall(function() return cjson.decode(data) end)
-    if not ok then
-        error('Unable to load: '..runeFile)
-    end
-
-    for _, rune in pairs(runeInfo.data) do
-        local runeId = 'rune'..rune.id
-        if rune.tags then
-            for _, tag in ipairs(rune.tags) do
-                for _, category in ipairs(generateSubCategories(tag)) do
-                    local tagCategory = runeCategories[category] or {}
-                    table.insert(tagCategory, runeId)
-                    runeCategories[category] = tagCategory
-                end
-            end
-        end
-
-        if rune.stats then
-            for stat in pairs(rune.stats) do
-                for _, category in ipairs(generateSubCategories(stat)) do
-                    local statCategory = runeCategories[category] or {}
-                    table.insert(statCategory, runeId)
-                    runeCategories[category] = statCategory
-                end
-            end
-        end
-
-        if rune.rune then
-            local tierCategory = 'tier'..rune.rune.tier
-            local tier = runeCategories[tierCategory] or {}
-            table.insert(tier, runeId)
-            runeCategories[tierCategory] = tier
-
-            local typeCategory = 'type'..rune.rune.type
-            local runeType = runeCategories[typeCategory] or {}
-            table.insert(runeType, runeId)
-            runeCategories[typeCategory] = runeType
-        end
+    for id in pairs(info.data) do
+        features[prefix..id] = true
     end
 end
 
-local function generateItemCorpus(datadir, itemCategories)
-    print('generating item corpus...')
-    local itemFile = datadir..path.sep..'items.json'
-    local data = file.read(itemFile)
-    local ok,itemInfo = pcall(function() return cjson.decode(data) end)
-    if not ok then
-        error('Unable to load: '..itemFile)
-    end
-
-    local itemMetaTags = {}
-    for _, treeInfo in pairs(itemInfo.tree) do
-        for _,tag in ipairs(treeInfo.tags) do
-            if tag ~= '_SORTINDEX' then
-                itemMetaTags[tag] = treeInfo.header
-            end
-        end
-    end
-
-    local itemTrees = {}
-    for _, item in pairs(itemInfo.data) do
-        local itemId = 'item'..item.id
-        itemTrees[itemId] = graph.Node(itemId)
-
-        if item.tags then
-            for _, tag in ipairs(item.tags) do
-                local metaTag = itemMetaTags[tag]
-                if metaTag then
-                    local metaTagCategory = itemCategories[metaTag] or {}
-                    table.insert(metaTagCategory, itemId)
-                    itemCategories[metaTag] = metaTagCategory
-                end
-
-                for _, category in ipairs(generateSubCategories(tag)) do
-                    local tagCategory = itemCategories[category] or {}
-                    table.insert(tagCategory, itemId)
-                    itemCategories[category] = tagCategory
-                end
-            end
-        end
-
-        if item.stats then
-            for stat in pairs(item.stats) do
-                for _, category in ipairs(generateSubCategories(stat)) do
-                    local statCategory = itemCategories[category] or {}
-                    table.insert(statCategory, itemId)
-                    itemCategories[category] = statCategory
-                end
-            end
-        end
-
-        if item.group then
-            for _, category in ipairs(generateSubCategories(item.group)) do
-                local group = itemCategories[category] or {}
-                table.insert(group, itemId)
-                itemCategories[category] = group
-            end
-        end
-    end
-
-    for _, item in pairs(itemInfo.data) do
-        local itemId = 'item'..item.id
-        local itemNode = itemTrees[itemId]
-        if item.from then
-            for _,fromId in ipairs(item.from) do
-                itemNode:add(itemTrees['item'..fromId])
-            end
-        end
-    end
-end
-
-local function generateChampionCorpus(datadir, corpus)
-    print('generating champion corpus...')
-    local championFile = datadir..path.sep..'champions.json'
-    local data = file.read(championFile)
-    local ok,championInfo = pcall(function() return cjson.decode(data) end)
-    if not ok then
-        error('Unable to load: '..championFile)
-    end
-
-    local championCategories = {}
-    for _, champion in pairs(championInfo.data) do
-        if champion.tags then
-            local championId = 'champion'..champion.id
-            for _, tag in ipairs(champion.tags) do
-                local tagCategory = championCategories[tag] or {}
-                table.insert(tagCategory, championId)
-                championCategories[tag] = tagCategory
-            end
-        end
-    end
-
-    print('Champion categories: ')
-    generateShuffledCorpus(championCategories, corpus)
-end
-
-local function generateSpellCorpus(datadir, corpus)
-    print('generating spell corpus...')
-    local spellFile = datadir..path.sep..'spells.json'
+local function getSpellFeatures(datadir, features)
+    local spellFile = path.join(datadir, 'spells.json')
     local data = file.read(spellFile)
     local ok,spellInfo = pcall(function() return cjson.decode(data) end)
     if not ok then
         error('Unable to load: '..spellFile)
     end
 
-    local spellModes = {}
     for _, spell in pairs(spellInfo.data) do
-        if spell.modes then
-            local spellId = 'spell'..spell.id
-            for _, mode in ipairs(spell.modes) do
-                local modeMode = spellModes[mode] or {}
-                table.insert(modeMode, spellId)
-                spellModes[mode] = modeMode
-            end
-        end
+        features['s'..spell.id] = true
     end
-
-    generateShuffledCorpus(spellModes, corpus)
 end
 
-local function generateVersionCorpus(datadir, corpus)
-    print('generating version corpus...')
-    local versionFile = datadir..path.sep..'versions.json'
+local function getVersionFeatures(datadir, features)
+    local versionFile = path.join(datadir, 'versions.json')
     local data = file.read(versionFile)
     local ok,versionInfo = pcall(function() return cjson.decode(data) end)
     if not ok then
         error('Unable to load: '..versionFile)
     end
 
-    local versions = {}
     for _, version in ipairs(versionInfo) do
-        versions[dataset.versionFromString(version)] = true
+        features[dataset.versionFromString(version)] = true
     end
-
-    generateShuffledCorpus({tablex.keys(versions)}, corpus)
 end
 
-local function generateCorpus(datadir, outfile)
+local function getChampionFeatures(datadir, features)
+    local championFile = path.join(datadir, 'champions.json')
+    local data = file.read(championFile)
+    local ok,championInfo = pcall(function() return cjson.decode(data) end)
+    if not ok then
+        error('Unable to load: '..championFile)
+    end
+
+    for championId in pairs(championInfo.keys) do
+        features['c'..championId] = true
+    end
+end
+
+local function addFeatures(values, features)
+    for _, value in ipairs(values) do
+        features[value] = true
+    end
+end
+
+local function getAllFeatures(datadir)
+    local features = {}
+    getSpellFeatures(datadir, features)
+    getVersionFeatures(datadir, features)
+    getChampionFeatures(datadir, features)
+    getFeatures(datadir, 'runes.json', 'r', features)
+    getFeatures(datadir, 'items.json', 'i', features)
+    getFeatures(datadir, 'masteries.json', 'm', features)
+
+    addFeatures({'DUO', 'NONE', 'SOLO', 'DUO_CARRY', 'DUO_SUPPORT'}, features) --roles
+    addFeatures({'MID', 'TOP', 'JUNGLE', 'BOT'}, features) --lanes
+    addFeatures(tablex.keys(lol.api.Regions), features) --regions
+    addFeatures({'CHALLENGER', 'MASTER', 'DIAMOND', 'PLATINUM', 'GOLD', 'SILVER', 'BRONZE', 'UNRANKED'}, features) --tiers
+
+    return features
+end
+
+local function getChampionId(participant)
+    return 'c'..participant.championId
+end
+
+local function getSpellId(participant, index)
+    return 's'..participant['spell'..index..'Id']
+end
+
+local function getRuneId(rune)
+    return 'r'..rune.runeId
+end
+
+local function getMasteryId(mastery)
+    return 'm'..mastery.masteryId
+end
+
+local function getItemId(itemId)
+    return 'i'..itemId
+end
+
+local function getSpells(participant, sentence)
+    for i=1, dataset.maxSpellCount do
+        local spellId = participant['spell'..i..'Id']
+        if spellId then
+            table.insert(sentence, getSpellId(participant, i))
+        end
+    end
+end
+
+local function getItems(stats, sentence)
+    for i=0, dataset.maxItemCount-1 do
+        local itemId = stats['item'..i]
+        if itemId and itemId > 0 then
+            table.insert(sentence, getItemId(itemId))
+        end
+    end
+end
+
+local function getRunes(participant, sentence)
+    if participant.runes then
+        for _,rune in ipairs(participant.runes) do
+            table.insert(sentence, getRuneId(rune))
+        end
+    end
+end
+
+local function getMasteries(participant, sentence)
+    if participant.masteries then
+        for _,mastery in ipairs(participant.masteries) do
+            table.insert(sentence, getMasteryId(mastery))
+        end
+    end
+end
+
+local function getMatchData(match, participant)
+    local input = {}
+    table.insert(input, string.lower(match.region))
+    table.insert(input, dataset.versionFromString(match.matchVersion))
+    table.insert(input, getChampionId(participant))
+    table.insert(input, getLane(participant.timeline.lane))
+    table.insert(input, participant.timeline.role)
+    table.insert(input, participant.highestAchievedSeasonTier)
+
+    local target = {}
+    getSpells(participant, target)
+    getItems(participant.stats, target)
+    getRunes(participant, target)
+    getMasteries(participant, target)
+
+    return table.concat(input, ' ')..'\n'..table.concat(target, ' ')
+end
+
+local function validParticipant(participant)
+    return participant.stats ~= nil
+end
+
+local function verifyFeature(entry, features)
+    return features[entry] ~= nil
+end
+
+local function isMatchValid(match, features)
+    if not verifyFeature(string.lower(match.region), features) then return false end
+    if not verifyFeature(dataset.versionFromString(match.matchVersion), features) then return false end
+
+    for _,participant in ipairs(match.participants) do
+        if not verifyFeature(getChampionId(participant), features) then return false end
+        if not verifyFeature(getLane(participant.timeline.lane), features) then return false end
+        if not verifyFeature(participant.timeline.role, features) then return false end
+        if not verifyFeature(participant.highestAchievedSeasonTier, features) then return false end
+
+        if participant.spell1Id and participant.spell1Id > 0 then
+            if not verifyFeature(getSpellId(participant, 1), features) then return false end
+        end
+
+        if participant.spell2Id and participant.spell2Id > 0 then
+            if not verifyFeature(getSpellId(participant, 2), features) then return false end
+        end
+
+        if participant.runes then
+            for _,rune in ipairs(participant.runes) do
+                if not verifyFeature(getRuneId(rune), features) then return false end
+            end
+        end
+
+        if participant.masteries then
+            for _,mastery in ipairs(participant.masteries) do
+                if not verifyFeature(getMasteryId(mastery), features) then return false end
+            end
+        end
+
+        if participant.stats then
+            for i=0, dataset.maxItemCount-1 do
+                local itemId = participant.stats['item'..i]
+                if itemId and itemId > 0 then
+                    if not verifyFeature(getItemId(itemId), features) then return false end
+                end
+            end
+        end
+    end
+
+    return true
+end
+
+local function matchesForThread(threadid, matchlist)
+    local matchesPerThread = math.ceil(#matchlist/params.threads)
+    return tablex.sub(matchlist, ((threadid-1)*matchesPerThread)+1, threadid*matchesPerThread)
+end
+
+local function verifyMatches(matchlist, features)
+    threads.serialization('threads.sharedserialize')
+    local pool = threads.Threads(
+        params.threads,
+        function()
+            _G['cjson'] = require('cjson')
+            _G['file'] = require('pl.file')
+            _G['tablex'] = require('pl.tablex')
+        end
+    )
+
+    local invalidMatchList = {}
+    local participantsPerThread = torch.LongTensor(params.threads)
+    for i=1,params.threads do
+        pool:addjob(
+            function(matches)
+                local participants = 0
+                local invalidMatches = {}
+                local threadid = _G['__threadid']
+                for _,matchfile in ipairs(matches) do
+                    local data = _G['file'].read(matchfile)
+                    local ok,match = pcall(function() return _G['cjson'].decode(data) end)
+                    if ok then
+                        if isMatchValid(match, features) then
+                            local lastProgress = math.floor(participants / params.progress)
+                            participants = participants + #match.participants
+                            if lastProgress ~= math.floor(participants / params.progress) then
+                                print('Thread: '..threadid..' verified '..participants..' participants')
+                            end
+                        else
+                            invalidMatches[matchfile] = true
+                        end
+                    end
+                end
+
+                participantsPerThread[threadid] = participants
+                return invalidMatches
+            end,
+            function(invalidMatches)
+                invalidMatchList = _G['tablex'].merge(invalidMatchList, invalidMatches, true)
+            end,
+            matchesForThread(i, matchlist)
+        )
+    end
+    pool:synchronize()
+    pool:terminate()
+
+    return invalidMatchList, torch.sum(participantsPerThread)
+end
+
+local function processMatches(matchlist, invalidMatches, outfile, tmpfiles)
+    threads.serialization('threads.sharedserialize')
+    local pool = threads.Threads(
+        params.threads,
+        function()
+            _G['cjson'] = require('cjson')
+            _G['file'] = require('pl.file')
+        end
+    )
+
+    local fullCorpus = io.open(outfile, 'w+')
+    for i=1,params.threads do
+        pool:addjob(
+            function(matches)
+                local threadid = _G['__threadid']
+
+                local tmpfile = tmpfiles[threadid]
+                local corpus = io.open(tmpfile, 'w+')
+                local participantIndex = 0
+                for _,matchFile in pairs(matches) do
+                    if not invalidMatches[matchFile] then
+                        local data = _G['file'].read(matchFile)
+                        local ok,match = pcall(function() return _G['cjson'].decode(data) end)
+                        if ok then
+                            for _,participant in ipairs(match.participants) do
+                                if validParticipant(participant) then
+                                    local sentence = getMatchData(match, participant)
+                                    corpus:write(sentence)
+                                    corpus:write('\n')
+
+                                    participantIndex = participantIndex + 1
+                                    if participantIndex % params.progress == 0 then
+                                        print('Thread: '..threadid..' processed '..participantIndex..' participants')
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+
+                corpus:flush()
+                corpus:close()
+                
+                return tmpfile
+            end,
+            function(tmpfile)
+                local corpus = io.open(tmpfile, 'r')
+                for line in corpus:lines() do
+                    fullCorpus:write(line)
+                    fullCorpus:write('\n')
+                end
+
+                fullCorpus:flush()
+                corpus:close()
+            end,
+            matchesForThread(i, matchlist)
+        )
+    end
+    pool:synchronize()
+    pool:terminate()
+end
+
+local function matchesToCorpus(matchdir, datadir, outfile, tmpfiles)
     local timer = torch.Timer()
-    local corpus = io.open(datadir..path.sep..outfile, 'w')
-    local categories = {}
 
     print('timer: ', timer:time().real)
-    generateMasteryCorpus(params.datadir, corpus)
+    print('verify matches...')
+    local features = getAllFeatures(datadir)
+    local matchlist = dir.getallfiles(matchdir, '*.json')
+    local invalidMatches, participantCount = verifyMatches(matchlist, features)
+
+    print('# participants: '..participantCount, '# invalid matches: '..tablex.size(invalidMatches))
 
     print('timer: ', timer:time().real)
-    generateRuneCorpus(params.datadir, categories)
-
-    print('timer: ', timer:time().real)
-    generateItemCorpus(params.datadir, categories)
-
-    print('timer: ', timer:time().real)
-    generateChampionCorpus(params.datadir, corpus, categories)
-
-    print('timer: ', timer:time().real)
-    generateSpellCorpus(params.datadir, corpus)
-
-    print('timer: ', timer:time().real)
-    generateVersionCorpus(params.datadir, corpus)
-
-    generateShuffledCorpus(categories, corpus) --categories
-    generateShuffledCorpus({{'DUO', 'NONE', 'SOLO', 'DUO_CARRY', 'DUO_SUPPORT'}}, corpus) --roles
-    generateShuffledCorpus({{'MID', 'TOP', 'JUNGLE', 'BOT'}}, corpus) --lanes
-    generateShuffledCorpus({tablex.keys(lol.api.Regions)}, corpus) --regions
-    generateShuffledCorpus({{'CHALLENGER', 'MASTER', 'DIAMOND', 'PLATINUM', 'GOLD', 'SILVER', 'BRONZE', 'UNRANKED'}}, corpus) --tiers
+    print('process matches...')
+    processMatches(matchlist, invalidMatches, path.join(datadir, outfile), tmpfiles)
 
     print('done in time (seconds): ', timer:time().real)
 end
 
-generateCorpus(params.datadir, params.outfile)
+local tmpfiles = {}
+for _=1,params.threads do
+    table.insert(tmpfiles, os.tmpname())
+end
+
+local function errorHandler(errmsg)
+    errmsg = errmsg..'\n'..debug.traceback()
+    print(errmsg)
+
+    for _,tmpfile in ipairs(tmpfiles) do
+        os.remove(tmpfile)
+    end
+end
+
+local ok, errmsg = xpcall(matchesToCorpus, errorHandler, params.matchdir, params.datadir, params.outfile, tmpfiles)
+if not ok then
+    print('Failed to generate corpus!')
+
+    print(errmsg)
+    os.exit()
+end

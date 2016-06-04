@@ -3,7 +3,7 @@ require('nn')
 local nngraph = require('nngraph')
 local path = require('pl.path')
 local torch = require('torch')
-require('MSETableCriterion')
+require('MSEEmbeddingCriterion')
 require('TemporalBatchNormalization')
 
 local cmd = torch.CmdLine()
@@ -21,12 +21,20 @@ cmd:option('-version','6.7','what version to predict')
 cmd:option('-region','na','what region to predict')
 cmd:option('-tier','MASTER','what tier to predict')
 cmd:option('-threshold',.9,'the minimum confidence threshold for output')
+cmd:option('-format','compact','what format to use for output: "full" or "compact" (compact does not include confidence)')
 cmd:text()
 
 local params = cmd:parse(arg)
 if params.debug then
     print('setting debug mode')
     nngraph.setDebug(true)
+end
+
+local availableFormats = {full=true, compact=true}
+local format = params.format
+if not availableFormats[format] then
+    print(format..' is not a valid format.')
+    os.exit()
 end
 
 print('loading model from '..params.model)
@@ -50,4 +58,14 @@ input[1][5] = dataLoader:getRegionVector(params.region)
 input[1][6] = dataLoader:getTierVector(params.tier)
 
 print('champion: '..params.champion..', role: '..params.role..', lane: '..params.lane)
-dataLoader:sample(model, input, params.threshold)
+local prediction = dataLoader:sample(model, input)
+for _, row in ipairs(prediction) do
+    if row.confidence > params.threshold then
+        local output = 'datatype: '..row.datatype..', name: '..row.name
+        if format == 'full' then
+            output = output..', confidence: '..row.confidence
+        end
+
+        print(output)
+    end
+end
