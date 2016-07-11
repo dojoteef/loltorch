@@ -1,0 +1,47 @@
+#!/bin/bash
+modeltype=$1
+if [ $modeltype == "" ]
+then
+    echo "Must provide model type!"
+    exit
+fi
+
+modeldir=models
+modelname=$modeltype.t7
+model=$modeldir/$modelname
+if [ ! -r $model ]
+then
+    snapshotdir=snapshots
+    lastsnapshot=$(ls -t $snapshotdir/$modeltype/**/*.t7 2> /dev/null | head -1)
+    if [ -n $lastsnapshot ]
+    then
+        model=$lastsnapshot
+    fi
+fi
+
+if [ ! -r $model ]
+then
+    echo "Model file: $model not found!"
+    exit
+fi
+
+build1="$2"
+build2="$3"
+
+shift 3
+params="$*"
+
+samples=()
+function sample {
+    IFS=';' read -ra crl <<< "$1"
+    SAMPLE=$(th sample.lua -model $model -champion ${crl[0]} -role ${crl[1]} -lane ${crl[2]} $params)
+}
+
+sample "$build1"
+sample1="$SAMPLE"
+
+sample "$build2"
+sample2="$SAMPLE"
+
+echo "$sample1"
+diff <(echo "$sample1" | cut -d',' -f 1-2) <(echo "$sample2" | cut -d',' -f 1-2)

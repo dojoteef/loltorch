@@ -39,7 +39,7 @@ local function convertEmbeddings(datadir, outfile)
     end
     embeddingFile:close()
 
-    torch.save(datadir..path.sep..outfile, embeddings)
+    torch.save(path.join(datadir, outfile), embeddings)
 end
 
 convertEmbeddings(params.datadir, params.outfile)

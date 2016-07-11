@@ -1,0 +1,20 @@
+#!/bin/bash
+scriptdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+modeltype=$1
+shift
+params="$*"
+
+$scriptdir/sampler $modeltype "RekSai;DUO_SUPPORT;BOT" "Thresh;DUO_SUPPORT;BOT" "$params"
+echo "Press any key to continue"
+read -n 1
+
+$scriptdir/sampler $modeltype "Blitzcrank;DUO_CARRY;BOT" "Ezreal;DUO_CARRY;BOT" "$params"
+echo "Press any key to continue"
+read -n 1
+
+$scriptdir/sampler $modeltype "Janna;SOLO;JUNGLE" "Elise;SOLO;JUNGLE" "$params"
+echo "Press any key to continue"
+read -n 1
+
+$scriptdir/sampler $modeltype "Braum;SOLO;MID" "Ekko;SOLO;MID" "$params"

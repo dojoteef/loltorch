@@ -1,14 +1,18 @@
 #!/bin/bash
+declare -a tiers=('challenger' 'master')
 declare -a regions=('oce' 'eune' 'br' 'euw' 'kr' 'lan' 'las' 'na' 'tr' 'ru')
-for region in "${regions[@]}"
+for tier in "${tiers[@]}"
 do
-    mkdir -p "matches/""${region}"
-    th getmatches.lua -region "${region}" -outdir matches -tier challenger &
-done
+    for region in "${regions[@]}"
+    do
+        mkdir -p "matches/""${region}"
+        th getmatches.lua -region "${region}" -outdir matches -tier "${tier}" &
+    done
 
-for job in `jobs -p`
-do
-    wait $job
+    for job in `jobs -p`
+    do
+        wait $job
+    done
 done
 
 

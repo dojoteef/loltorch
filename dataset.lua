@@ -6,17 +6,90 @@ local torch = require('torch')
 local dataset = {
     maxSpellCount=2,
     maxItemCount = 7,
+    maxBlueRuneCount = 9,
+    maxRedRuneCount = 9,
+    maxYellowRuneCount = 9,
+    maxBlackRuneCount = 3,
     maxRuneCount = 30,
     maxMasteryCount = 30,
-
-    -- Using the knowledge from this forum post for
-    -- determining version, i.e. just using major/minor
-    -- https://developer.riotgames.com/discussion/community-discussion/show/FJT1rYsF
-    versionFromString = function(versionString)
-        local _,_,version = string.find(versionString,"^(%d+%.%d+)")
-        return 'version'..version
-    end
+    runeOrder = {'blue','red','yellow','black'},
+    masteryOrder = {'Cunning','Ferocity','Resolve'},
+    validQueueTypes = {
+        RANKED_SOLO_5x5 = true,
+        RANKED_TEAM_5x5 = true,
+        NORMAL_5x5_BLIND = true,
+        NORMAL_5x5_DRAFT = true,
+        GROUP_FINDER_5x5 = true,
+        TEAM_BUILDER_DRAFT_RANKED_5x5 = true,
+        TEAM_BUILDER_DRAFT_UNRANKED_5x5 = true,
+    }
 }
+
+-- Using the knowledge from this forum post for
+-- determining version, i.e. just using major/minor
+-- https://developer.riotgames.com/discussion/community-discussion/show/FJT1rYsF
+function dataset.parseVersion(versionString)
+    local _,_,major,minor = string.find(versionString,"^(%d+)%.(%d+)")
+    return {major=tonumber(major), minor=tonumber(minor)}
+end
+
+function dataset.compareVersion(v1, v2)
+    return v1.major < v2.major or (v1.major == v2.major and v1.minor < v2.minor)
+end
+
+function dataset.versionFromString(versionString)
+    local version = dataset.parseVersion(versionString)
+    return 'version'..version.major..'.'..version.minor
+end
+
+function dataset.championId(participant)
+    return 'c'..participant.championId
+end
+
+function dataset.spellId(participant, index)
+    return 's'..participant['spell'..index..'Id']
+end
+
+function dataset.runeId(rune)
+    return 'r'..rune.runeId
+end
+
+function dataset.masteryId(mastery)
+    return 'm'..mastery.masteryId
+end
+
+function dataset.itemId(itemId)
+    return 'i'..itemId
+end
+
+-- Normalize on one representation for lane
+function dataset.normalizeLane(lane)
+    if lane == 'MIDDLE' then
+        return 'MID'
+    elseif lane == 'BOTTOM' then
+        return 'BOT'
+    else
+        return lane
+    end
+end
+
+-- Normalize role by fixing up 'NONE'
+-- The function is FAR from perfect, but should help clean up some of the data.
+-- Ideally it would also separate DUO into DUO_CARRY and DUO_SUPPORT, but that
+-- seems like a difficult task.
+function dataset.normalizeRole(lane, role)
+    if role == 'NONE' then
+        lane = dataset.normalizeLane(lane)
+        if lane == 'BOT' then
+            return 'DUO'
+        else
+            return 'SOLO'
+        end
+    else
+        return role
+    end
+end
+
 local targetCount = 0
 for _,count in pairs(dataset) do
     if type(count) == 'number' then
@@ -27,41 +100,40 @@ dataset.targetCount = targetCount
 
 local _data = torch.class('Dataset.Data', dataset)
 local _loader = torch.class('Dataset.Loader', dataset)
+local _sampler = torch.class('Dataset.Sampler', dataset)
 
-function _loader:__init(datadir, ptrain, pvalidate, ptest)
+function _loader:__init(datadir, testRatio, kfolds, batchsize)
     assert(path.isdir(datadir), 'Invalid data directory specified')
-    self.dir = datadir
-    self.embeddings = torch.load(self.dir..path.sep..'embeddings.t7')
+    self.embeddings = torch.load(path.join(datadir, 'embeddings.t7'))
 
-    local data = file.read(self.dir..path.sep..'champions.json')
-    local ok,json = pcall(function() return cjson.decode(data) end)
-    assert(ok, 'Unable to load champions.json')
-    self.champion = json
+    self.kfolds = kfolds
+    self.testRatio = testRatio
 
-    data = file.read(self.dir..path.sep..'items.json')
-    ok,json = pcall(function() return cjson.decode(data) end)
-    assert(ok, 'Unable to load items.json')
-    self.item = json
+    local inputs = torch.load(path.join(datadir, 'inputs.t7'))
+    local targets = torch.load(path.join(datadir, 'targets.t7'))
+    local outcomes = torch.load(path.join(datadir, 'outcomes.t7'))
+    assert(inputs:type() == targets:type(), 'Dataset mismatch: input type ('..inputs:type()..'), target type ('..targets:type()..')')
+    assert(inputs:size(1) == targets:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), target size ('..targets:size(1)..')')
+    assert(inputs:size(1) == outcomes:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), outcome size ('..outcomes:size(1)..')')
 
-    data = file.read(self.dir..path.sep..'masteries.json')
-    ok,json = pcall(function() return cjson.decode(data) end)
-    assert(ok, 'Unable to load masteries.json')
-    self.mastery = json
+    self.inputs = inputs
+    self.targets = targets
+    self.outcomes = outcomes
+    self.batchSize = batchsize
 
-    data = file.read(self.dir..path.sep..'runes.json')
-    ok,json = pcall(function() return cjson.decode(data) end)
-    assert(ok, 'Unable to load runes.json')
-    self.rune = json
+    -- Make sure new tensors we create a compatible with the tensor we expect
+    torch.setdefaulttensortype(torch.type(self.inputs))
 
-    data = file.read(self.dir..path.sep..'spells.json')
-    ok,json = pcall(function() return cjson.decode(data) end)
-    assert(ok, 'Unable to load spells.json')
-    self.spell = json
+    -- Split into training/test data
+    local count = self.inputs:size(1)
+    local trainIndex = count * (1 - self.testRatio)
 
-    local total = ptrain + pvalidate + ptest
-    self.trainRatio = ptrain / total
-    self.validateRatio = pvalidate / total
-    self.testRatio = ptest / total
+    -- make training data equally divisible by kfolds * batchsize
+    trainIndex = trainIndex - math.fmod(trainIndex, (self.kfolds*self.batchSize))
+
+    local indices = torch.randperm(self.inputs:size(1)):long()
+    self.folds = indices[{{1, trainIndex}}]:view(self.kfolds, -1)
+    self.testData = dataset.Data(self.inputs, self.targets, self.outcomes, indices[{{trainIndex+1, count}}], self.batchSize)
 end
 
 function _loader:embeddingSize()
@@ -73,52 +145,67 @@ function _loader:tensorType()
     return torch.type(self.inputs)
 end
 
-function _loader:load(batchsize, seed)
-    local inputs = torch.load(self.dir..path.sep..'inputs.t7')
-    local targets = torch.load(self.dir..path.sep..'targets.t7')
-    local outcomes = torch.load(self.dir..path.sep..'outcomes.t7')
-    assert(inputs:type() == targets:type(), 'Dataset mismatch: input type ('..inputs:type()..'), target type ('..targets:type()..')')
-    assert(inputs:size(1) == targets:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), target size ('..targets:size(1)..')')
-    assert(inputs:size(1) == outcomes:size(1), 'Dataset mismatch: input size ('..inputs:size(1)..'), outcome size ('..outcomes:size(1)..')')
+function _loader:getFold(k)
+    local folds = torch.range(1, self.kfolds):long()
 
-    -- Create a random number generator specifically for randomly permuting
-    -- the data so that we can ensure we do it the same if continuing training.
-    local generator = torch.Generator()
-    if seed then
-        torch.manualSeed(generator, seed)
-    end
+    local mask = torch.ne(folds, k):view(-1, 1):expandAs(self.folds)
+    local trainIndices = self.folds:maskedSelect(mask)
+    local trainData = dataset.Data(self.inputs, self.targets, self.outcomes, trainIndices:view(-1), self.batchSize)
 
-    -- Make sure new tensors we create a compatible with the tensor we expect
-    torch.setdefaulttensortype(torch.type(inputs))
+    mask = torch.eq(folds, k):view(-1, 1):expandAs(self.folds)
+    local validateIndices = self.folds:maskedSelect(mask)
+    local validateData = dataset.Data(self.inputs, self.targets, self.outcomes, validateIndices:view(-1), self.batchSize, true)
 
-    local count = inputs:size(1)
-    local trainIndex = math.floor(count * self.trainRatio)
-    local validateIndex = trainIndex + math.floor(count * self.validateRatio)
-
-    local indices = torch.randperm(inputs:size(1)):long()
-    local view = indices[{{1, trainIndex}}]
-    local trainData = dataset.Data(inputs, targets, outcomes, view, batchsize)
-
-    view = indices[{{trainIndex+1, validateIndex}}]
-    local validateData = dataset.Data(inputs, targets, outcomes, view, batchsize, true)
-
-    view = indices[{{validateIndex+1, count}}]
-    local testData = dataset.Data(inputs, targets, outcomes, view, batchsize, true)
-
-    return {train=trainData, validate=validateData, test=testData, seed=torch.initialSeed(generator)}
+    return trainData, validateData
 end
 
-function _loader:getDataByType(vector, targetType)
+function _sampler:__init(datadir)
+    assert(path.isdir(datadir), 'Invalid data directory specified')
+    self.embeddings = torch.load(path.join(datadir, 'embeddings.t7'))
+
+    local data = file.read(path.join(datadir, 'champions.json'))
+    local ok,json = pcall(function() return cjson.decode(data) end)
+    assert(ok, 'Unable to load champions.json')
+    self.champion = json
+
+    data = file.read(path.join(datadir, 'items.json'))
+    ok,json = pcall(function() return cjson.decode(data) end)
+    assert(ok, 'Unable to load items.json')
+    self.item = json
+
+    data = file.read(path.join(datadir, 'masteries.json'))
+    ok,json = pcall(function() return cjson.decode(data) end)
+    assert(ok, 'Unable to load masteries.json')
+    self.mastery = json
+
+    data = file.read(path.join(datadir, 'runes.json'))
+    ok,json = pcall(function() return cjson.decode(data) end)
+    assert(ok, 'Unable to load runes.json')
+    self.rune = json
+
+    data = file.read(path.join(datadir, 'spells.json'))
+    ok,json = pcall(function() return cjson.decode(data) end)
+    assert(ok, 'Unable to load spells.json')
+    self.spell = json
+end
+
+function _sampler:embeddingSize()
+    local _,embedding = next(self.embeddings)
+    return embedding:size(1)
+end
+
+function _sampler:getClosestData(vector, targetType, filter, list)
     -- Use cosine similarity to determine closest
     local closestId
     local closestSimilarity = -1
     local vectorNorm = vector:norm()
     for id,embedding in pairs(self.embeddings) do
-        local _,_, embeddingType = string.find(id, '^(%a+)')
-        if embeddingType == string.sub(targetType, 1, 1) then
+        local _,_,idString = string.find(id, '(%d+)')
+        local _,_,embeddingType = string.find(id, '^(%a+)')
+        if embeddingType == string.sub(targetType, 1, 1) and (not filter or not filter(self, idString, list)) then
             local similarity = vector:dot(embedding)/(vectorNorm * embedding:norm())
             if similarity >= closestSimilarity then
-                closestId = id
+                closestId = idString
                 closestSimilarity = similarity
             end
         end
@@ -128,26 +215,28 @@ function _loader:getDataByType(vector, targetType)
         return
     end
 
-    local _,_,id = string.find(closestId, '(%d+)')
-    local data = self[targetType].data
-    local value = data[id]
-    local name = value and value.name
+    return self:getData(closestId, targetType), closestSimilarity
+end
 
-    if not name then
+function _sampler:getData(idString, targetType)
+    local data = self[targetType].data
+    local value = data[idString]
+
+    if not value then
         -- must be by name
-        id = tonumber(id)
-        for k, v in pairs(data) do
+        local id = tonumber(idString)
+        for _, v in pairs(data) do
             if v.id == id then
-                name = k
+                value = v
                 break
             end
         end
     end
 
-    return name, closestSimilarity
+    return value
 end
 
-function _loader:getChampionVector(champion)
+function _sampler:getChampionVector(champion)
     local championId
     for name, data in pairs(self.champion.data) do
         if name == champion then
@@ -160,48 +249,182 @@ function _loader:getChampionVector(champion)
     return self.embeddings['c'..championId]
 end
 
-function _loader:getLaneVector(lane)
-    return self.embeddings[lane]
+function _sampler:getLaneVector(lane)
+    return self.embeddings[dataset.normalizeLane(lane)]
 end
 
-function _loader:getRoleVector(role)
-    return self.embeddings[role]
+function _sampler:getRoleVector(lane, role)
+    return self.embeddings[dataset.normalizeRole(dataset.normalizeLane(lane), role)]
 end
 
-function _loader:getVersionVector(version)
-    return self.embeddings['version'..version]
+function _sampler:getVersionVector(version)
+    return self.embeddings[dataset.versionFromString(version)]
 end
 
-function _loader:getRegionVector(region)
+function _sampler:getRegionVector(region)
     return self.embeddings[region]
 end
 
-function _loader:getTierVector(tier)
+function _sampler:getTierVector(tier)
     return self.embeddings[tier]
 end
 
-function _loader:sample(model, input)
+function _sampler:filterSpells(spellId, list)
+    local spell = self:getData(spellId, 'spell')
+    for _, data in ipairs(list) do
+        if data.datatype == 'spell' and data.data.id == spell.id then
+            return true
+        end
+    end
+
+    return false
+end
+
+function _sampler.getRuneFilter(runeType)
+    return function(sampler, runeId, list)
+        local rune = sampler:getData(runeId, 'rune')
+        if rune.rune.type ~= runeType then
+            return true
+        end
+
+        local runeCount = 0
+        for _, data in ipairs(list) do
+            if data.datatype == 'rune' and data.data.rune.type == rune.rune.type then
+                runeCount = runeCount + 1
+            end
+        end
+
+        if rune.rune.type == 'black' and runeCount >= 3 then
+            return true
+        elseif runeCount >= 9 then
+            return true
+        end
+
+        return false
+    end
+end
+
+local function obeysMasteryRules(mastery, masteries, tree)
+    local ranks = {}
+    for _, m in ipairs(masteries) do
+        local rank = ranks[m.id] or {rank=0,max=m.ranks}
+        rank.rank = rank.rank + 1
+
+        ranks[m.id] = rank
+    end
+
+    if ranks[mastery.id] and ranks[mastery.id].rank >= mastery.ranks then
+        return false
+    end
+
+    for _, level in ipairs(tree) do
+        local levelMasteries = {}
+        for _, treeItem in ipairs(level.masteryTreeItems) do
+            if treeItem ~= cjson.null then
+                levelMasteries[treeItem.masteryId] = true
+            end
+        end
+
+        if levelMasteries[mastery.id] then
+            return true
+        end
+
+        local total = 0
+        local requiredRank
+        for masteryId in pairs(levelMasteries) do
+            local rank = ranks[masteryId]
+            if rank then
+                total = total + rank.rank
+                requiredRank = requiredRank or rank.max
+            end
+        end
+
+        if not requiredRank or total < requiredRank then
+            return false
+        end
+    end
+
+    return true
+end
+
+local function getMasteryIndex(mastery)
+    for i, masteryTree in ipairs(dataset.masteryOrder) do
+        if masteryTree == mastery.masteryTree then
+            return i
+        end
+    end
+end
+
+local function getMasteryLevel(mastery, masteryTree)
+    for i, level in ipairs(masteryTree) do
+        for _, treeItem in ipairs(level.masteryTreeItems) do
+            if treeItem ~= cjson.null and treeItem.masteryId == mastery.id then
+                return i
+            end
+        end
+    end
+end
+
+function _sampler:filterMasteries(masteryId, list)
+    local masteries = {}
+    local mastery = self:getData(masteryId, 'mastery')
+    local masteryIndex = getMasteryIndex(mastery)
+    for _, data in ipairs(list) do
+        if data.datatype == 'mastery' then
+            local otherMastery = data.data
+            local masteryTree = masteries[otherMastery.masteryTree] or {}
+            table.insert(masteryTree, otherMastery)
+            table.insert(masteries, otherMastery)
+
+            masteries[otherMastery.masteryTree] = masteryTree
+        end
+    end
+
+    local masteryTree = self.mastery.tree[mastery.masteryTree]
+    if #masteries > 0 then
+        local lastMastery = masteries[#masteries]
+        local lastMasteryIndex = getMasteryIndex(lastMastery)
+        if masteryIndex < lastMasteryIndex then
+            return true
+        end
+
+        if masteryIndex == lastMasteryIndex and getMasteryLevel(mastery, masteryTree) < getMasteryLevel(lastMastery, masteryTree) then
+            return true
+        end
+    end
+
+    if not obeysMasteryRules(mastery, masteries[mastery.masteryTree] or {}, masteryTree) then
+        return true
+    end
+
+    return false
+end
+
+function _sampler:sample(model, input)
     local targetTypes = {
-        {count=dataset.maxSpellCount,type='spell'},
+        {count=dataset.maxSpellCount,type='spell',filter=self.filterSpells},
         {count=dataset.maxItemCount,type='item'},
-        {count=dataset.maxRuneCount,type='rune'},
-        {count=dataset.maxMasteryCount,type='mastery'},
+        {count=dataset.maxBlueRuneCount,type='rune',filter=self.getRuneFilter('blue')},
+        {count=dataset.maxRedRuneCount,type='rune',filter=self.getRuneFilter('red')},
+        {count=dataset.maxYellowRuneCount,type='rune',filter=self.getRuneFilter('yellow')},
+        {count=dataset.maxBlackRuneCount,type='rune',filter=self.getRuneFilter('black')},
+        {count=dataset.maxMasteryCount,type='mastery',filter=self.filterMasteries},
     }
 
     local output = {}
     local startIndex
     local endIndex = 0
 
-    local prediction = model:forward(input)
+    local prediction = model:forward(input):squeeze()
     for _,targetType in ipairs(targetTypes) do
         startIndex = endIndex+1
         endIndex = startIndex+targetType.count-1
 
         local slice = prediction[{{startIndex,endIndex}}]
         for j=1,slice:size(1) do
-            local name, confidence = self:getDataByType(slice[j], targetType.type)
-            if name then
-                table.insert(output, {name=name, datatype=targetType.type, confidence=confidence})
+            local data, confidence = self:getClosestData(slice[j], targetType.type, targetType.filter, output)
+            if data then
+                table.insert(output, {data=data, datatype=targetType.type, confidence=confidence})
             end
         end
     end
@@ -209,27 +432,7 @@ function _loader:sample(model, input)
     return output
 end
 
-function _data:__init(inputs, targets, outcomes, indices, batchsize, onlywins)
-    if onlywins then
-        local winCount = 0
-        for i=1,indices:size(1) do
-            if outcomes[indices[i]] == 1 then
-                winCount = winCount + 1
-            end
-        end
-
-        local j = 0
-        local wins = torch.LongTensor(winCount)
-        for i=1,indices:size(1) do
-            if outcomes[indices[i]] == 1 then
-                j = j + 1
-                wins[j] = i
-            end
-        end
-
-        indices = wins
-    end
-
+function _data:__init(inputs, targets, outcomes, indices, batchsize)
     self.inputs = inputs
     self.targets = targets
     self.outcomes = outcomes
@@ -237,8 +440,6 @@ function _data:__init(inputs, targets, outcomes, indices, batchsize, onlywins)
 
     self.batch = {}
     self.batchSize = batchsize
-
-    self:resetBatch()
 end
 
 function _data:tensorType()
@@ -246,16 +447,20 @@ function _data:tensorType()
 end
 
 function _data:size()
-    return self.indices:size(1)
+    return self.indices:nElement()
 end
 
 function _data:batchCount()
     return self:size()/self.batchSize
 end
 
-function _data:resetBatch()
-    local perm = torch.randperm(self.indices:size(1)):long()
-    self.indices = self.indices:indexCopy(1, perm, self.indices)
+function _data:shuffle()
+    if not self.startingIndices then
+        self.startingIndices = self.indices:clone()
+    end
+
+    local perm = torch.randperm(self:size()):long()
+    self.indices:indexCopy(1, perm, self.startingIndices)
 end
 
 function _data:batchForId(id)

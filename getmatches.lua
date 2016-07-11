@@ -33,15 +33,39 @@ local league = lol.league(api)
 local match = lol.match(api)
 local matchlist = lol.matchlist(api)
 
-local function onMatchResponse(res, code)
+local ignoreList
+local ignoreFile = path.join(opt.outdir, opt.region, '.ignorelist')
+if path.exists(ignoreFile) then
+    local data = file.read(ignoreFile)
+    local ok,list = pcall(function() return cjson.decode(data) end)
+    if ok then
+        ignoreList = list
+    end
+end
+ignoreList = ignoreList or {}
+
+local function onMatchResponse(res, code, matchId)
     -- Status 200 means success and code being nil means we retrieved the data from the cache
     if code ~= nil and code ~= 200 then
+        if code == 404 then
+            -- while this isn't very efficient if there are a large number of missing matches that doesn't
+            -- seem to be the case in practice so opting for a quick solution
+            ignoreList[tostring(matchId)] = true
+            file.write(ignoreFile, cjson.encode(ignoreList))
+        end
+
         print('Received error ('..code..') trying to retreive match: '..stringx.shorten(cjson.encode(res), 100))
         return
     end
 
     if res.matchId and res.region then
-        file.write(opt.outdir..path.sep..res.region..path.sep..res.matchId..'.json', cjson.encode(res))
+        file.write(path.join(opt.outdir, res.region, res.matchId..'.json'), cjson.encode(res))
+    end
+end
+
+local function onMatchResponseDecorator(matchId)
+    return function (res, code)
+        onMatchResponse(res, code, matchId)
     end
 end
 
@@ -54,7 +78,9 @@ local function onMatchlistResponse(res, code)
 
     if res.matches then
         for _, entry in pairs(res.matches) do
-            match:getById(entry.matchId, {callback=onMatchResponse})
+            if not ignoreList[tostring(entry.matchId)] then
+                match:getById(entry.matchId, {callback=onMatchResponseDecorator(entry.matchId)})
+            end
         end
     end
 end
@@ -66,10 +92,7 @@ local function onLeagueResponse(res, code)
         return
     end
 
-    local leaguePoints = {}
     for _, entry in pairs(res.entries) do
-        leaguePoints[entry.playerOrTeamId] = entry.leaguePoints
-        table.insert(leaguePoints, {playerId=entry.playerOrTeamId, leaguePoints=entry.leaguePoints})
         matchlist:getBySummonerId(entry.playerOrTeamId, {
             callback=onMatchlistResponse,
             filters={
@@ -78,11 +101,7 @@ local function onLeagueResponse(res, code)
             },
         })
     end
-
-    file.write(opt.outdir..path.sep..opt.region..'-league.json', cjson.encode(leaguePoints))
 end
-
-
 
 print('getting '..opt.region..' league')
 league:getLeague(opt.tier, 'RANKED_SOLO_5x5', {callback=onLeagueResponse})

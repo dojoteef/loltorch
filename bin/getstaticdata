@@ -1,0 +1,12 @@
+#!/bin/bash
+baseurl="https://ddragon.leagueoflegends.com"
+curl $baseurl/api/versions.json 2>/dev/null > dataset/versions.json
+
+version=$(curl https://ddragon.leagueoflegends.com/realms/na.json 2>/dev/null | sed 's/.*"v"\s*:\s*"\([^"]*\)".*/\1/')
+
+cdnurl="$baseurl/cdn/$version/data/en_US"
+curl $cdnurl/champion.json 2>/dev/null > dataset/champions.json
+curl $cdnurl/mastery.json 2>/dev/null > dataset/masteries.json
+curl $cdnurl/rune.json 2>/dev/null > dataset/runes.json
+curl $cdnurl/item.json 2>/dev/null > dataset/items.json
+curl $cdnurl/summoner.json 2>/dev/null > dataset/spells.json

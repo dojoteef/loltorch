@@ -1,13 +1,28 @@
 #!/bin/bash
-if [ "$1" == "" ]
+if [ "$1" == "" ] || [ "$1" == "-help" ]
+then
+    th main.lua -help
+    exit
+fi
+
+modeltype=$1
+if [ "$modeltype" == "" ]
 then
     echo "Must provide model type!"
     exit
 fi
 
-while [ ! -e $1.t7 ]
+shift
+params="$*"
+
+models=models
+modelname=$modeltype.t7
+modelpath=$models/$modelname
+snapshots=snapshots
+
+while [ ! -e $modelpath ]
 do
-    th trainbuild.lua -modeltype $1 -model $1.t7 -continue snapshot$1.t7 -snapshot snapshot$1.t7 -threads 8
+    th main.lua -modeltype $modeltype -model $modelname -models $models -snapshots $snapshots $params
     if [ $? -ne 0 ]; then
         exit
     fi

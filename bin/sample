@@ -1,45 +1,20 @@
 #!/bin/bash
-if [ "$1" == "" ]
-then
-    echo "Must provide model type!"
-    exit
-fi
+scriptdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-model=$1.t7
-if [ ! -r $model ]
-then
-    model=snapshot$1.t7
-fi
+modeltype=$1
+shift
+params="$*"
 
-if [ ! -r $model ]
-then
-    echo "Model file not found!"
-    exit
-fi
+$scriptdir/sampler $modeltype "Janna;DUO_SUPPORT;BOT" "Thresh;DUO_SUPPORT;BOT" "$params"
+echo "Press any key to continue"
+read -n 1
 
-if [ "$2" != "" ]
-then
-    threshold="-threshold $2"
-fi
+$scriptdir/sampler $modeltype "Lucian;DUO_CARRY;BOT" "Ezreal;DUO_CARRY;BOT" "$params"
+echo "Press any key to continue"
+read -n 1
 
-count=0
-samples=()
-inputs=("Janna;DUO_SUPPORT;BOT" "Lucian;SOLO;TOP" "Shyvana;SOLO;JUNGLE")
-for input in ${inputs[*]}
-do
-    IFS=';' read -ra crl <<< "$input"
-    samples[$count]=$(th sample.lua -model $model -champion ${crl[0]} -role ${crl[1]} -lane ${crl[2]} $threshold)
-    count=$((count+1))
-done
+$scriptdir/sampler $modeltype "RekSai;SOLO;JUNGLE" "Elise;SOLO;JUNGLE" "$params"
+echo "Press any key to continue"
+read -n 1
 
-echo "${samples[0]}"
-for ((i=0; i<${#samples[*]}; i++))
-do
-    for ((j=0; j<${#samples[*]}; j++))
-    do
-        if [ $i -ne $j ] && [ $i -lt $j ]
-        then
-            diff <(echo "${samples[$i]}") <(echo "${samples[$j]}")
-        fi
-    done
-done
+$scriptdir/sampler $modeltype "Fizz;SOLO;MID" "Ekko;SOLO;MID" "$params"
