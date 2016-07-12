@@ -2,6 +2,7 @@ local cjson = require('cjson')
 local dataset = require('dataset')
 local file = require('pl.file')
 local path = require('pl.path')
+local tds = require('tds')
 local threads = require('threads')
 local torch = require('torch')
 local utils = require('utils')
@@ -17,8 +18,6 @@ cmd:option('-datadir','dataset','the directory where to store the serialized dat
 cmd:option('-threads',8,'the number of threads to use when processing the dataset')
 cmd:option('-progress',100000,'display a progress update after x number of participants being processed')
 cmd:option('-tensortype','torch.FloatTensor','what type of tensor to use')
-cmd:option('-testratio',0.1,'what ratio of the resultant data to reserve for testing')
-cmd:option('-cutoff','6.7','ignore matches earlier than the cutoff')
 cmd:text()
 
 -- parse input opt
@@ -146,8 +145,8 @@ local function getRuneTypes(datadir)
     end
 
     local runeTypes = {}
-    for _,rune in pairs(runeInfo.data) do
-        runeTypes[rune.id] = rune.rune.type
+    for id,rune in pairs(runeInfo.data) do
+        runeTypes[tonumber(id)] = rune.rune.type
     end
 
     return runeTypes
@@ -162,8 +161,14 @@ local function getMasteryTypes(datadir)
     end
 
     local masteryTypes = {}
-    for _,mastery in pairs(masteryInfo.data) do
-        masteryTypes[mastery.id] = mastery.masteryTree
+    for tree, masteryList in pairs(masteryInfo.tree) do
+        for _, masteryGroup in ipairs(masteryList) do
+            for _,mastery in ipairs(masteryGroup) do
+                if mastery ~= cjson.null then
+                    masteryTypes[tonumber(mastery.masteryId)] = tree
+                end
+            end
+        end
     end
 
     return masteryTypes
@@ -180,9 +185,11 @@ local function countParticipants(matchlist)
         function()
             _G.cjson = require('cjson')
             _G.file = require('pl.file')
+            _G.tds = require('tds')
         end
     )
 
+    local participantsProcessed = tds.AtomicCounter()
     local participantsPerThread = torch.LongTensor(opt.threads)
     for i=1,opt.threads do
         pool:addjob(
@@ -197,9 +204,11 @@ local function countParticipants(matchlist)
                         for _,participant in ipairs(match.participants) do
                             if validParticipant(participant) then
                                 participantCount = participantCount + 1
-                                if participantCount % opt.progress == 0 then
-                                    print('Thread: '..threadid..' processed '..participantCount..' participants')
-                                end
+                            end
+
+                            local processed = participantsProcessed:inc() + 1
+                            if processed % opt.progress == 0 then
+                                print('Processed '..processed..' participants')
                             end
                         end
                     end
@@ -242,6 +251,7 @@ local function processMatches(matchlist, participantsPerThread, embeddings, data
 
     local runeTypes = getRuneTypes(datadir)
     local masteryTypes = getMasteryTypes(datadir)
+    local participantsProcessed = tds.AtomicCounter()
     for i=1,opt.threads do
         pool:addjob(
             function(first,last)
@@ -265,11 +275,6 @@ local function processMatches(matchlist, participantsPerThread, embeddings, data
                                 local lane = dataset.normalizeLane(participant.timeline.lane)
                                 local role = dataset.normalizeRole(lane, participant.timeline.role)
 
-                                local participantIndex = (dataIndex - dataOffset)
-                                if participantIndex % opt.progress == 0 then
-                                    print('Thread: '..threadid..' processed '..participantIndex..' participants')
-                                end
-
                                 outcomes[dataIndex] = participant.stats.winner and 1 or -1
 
                                 input[1] = embeddings[lane]
@@ -286,6 +291,11 @@ local function processMatches(matchlist, participantsPerThread, embeddings, data
                                 addMasteries(embeddings, participant, target, offset, masteryTypes)
 
                                 dataIndex = dataIndex + 1
+                            end
+
+                            local processed = participantsProcessed:inc() + 1
+                            if processed % opt.progress == 0 then
+                                print('Processed '..processed..' participants')
                             end
                         end
                     end
@@ -306,20 +316,20 @@ local function matchesToTensor()
 
     torch.setdefaulttensortype(opt.tensortype)
 
-    print('count participants...')
+    print('Count participants...')
     local matchlist = torch.load(opt.matchfile)
     local participantsPerThread =  countParticipants(matchlist)
 
-    print('process matches...')
+    print('Process matches...')
     local embeddings = torch.load(path.join(opt.datadir, 'embeddings.t7'))
     local inputs, targets, outcomes = processMatches(matchlist, participantsPerThread, embeddings, opt.datadir)
 
-    print('saving tensors...')
+    print('Saving tensors...')
     torch.save(path.join(opt.datadir,'inputs.t7'), inputs)
     torch.save(path.join(opt.datadir,'targets.t7'), targets)
     torch.save(path.join(opt.datadir,'outcomes.t7'), outcomes)
 
-    print('done in time (seconds): ', timer:time().real)
+    print(string.format('Done in %s', utils.formatTime(timer)))
 end
 
 local function errorHandler(errmsg)

@@ -26,4 +26,4 @@ th verifymatches.lua -datadir dataset -outfile matches.t7 -threads 8 $*
 th generatecorpus.lua -datadir dataset -matchfile dataset/matches.t7 -outfile corpus.txt -threads 8
 $WORD2VECCMD -train dataset/corpus.txt -output dataset/embeddings.txt -size 20 -window 8 -negative 25 -iter 30 -min-count 1 -threads 8
 th convertembedding.lua -datadir dataset -outfile embeddings.t7
-th processmatches.lua -datadir dataset -matchfile dataset/matches.t7 $*
+th processmatches.lua -datadir dataset -matchfile dataset/matches.t7

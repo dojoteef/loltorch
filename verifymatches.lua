@@ -18,7 +18,7 @@ cmd:text('Options')
 cmd:option('-matchdir','matches','the directory where the matches are located')
 cmd:option('-datadir','dataset','the directory where to store the serialized dataset')
 cmd:option('-threads',8,'the number of threads to use when processing the dataset')
-cmd:option('-progress',10000,'display a progress update after x number of matches being processed')
+cmd:option('-progress',100000,'display a progress update after x number of matches being processed')
 cmd:option('-outfile','matches.t7','the name of the output file which has the corpus')
 cmd:option('-cutoff','6.7','ignore matches earlier than the cutoff')
 cmd:text()
@@ -34,8 +34,12 @@ local function getFeatures(datadir, filename, prefix, features)
         error('Unable to load: '..featureFile)
     end
 
-    for id in pairs(info.data) do
-        features[prefix..id] = true
+    for id,value in pairs(info.data) do
+        if tonumber(id) then
+            features[prefix..id] = true
+        elseif tonumber(value.key) then
+            features[prefix..value.key] = true
+        end
     end
 end
 
@@ -48,7 +52,7 @@ local function getSpellFeatures(datadir, features)
     end
 
     for _, spell in pairs(spellInfo.data) do
-        features['s'..spell.id] = true
+        features['s'..spell.key] = true
     end
 end
 
@@ -61,7 +65,10 @@ local function getVersionFeatures(datadir, features)
     end
 
     for _, version in ipairs(versionInfo) do
-        features[dataset.versionFromString(version)] = true
+        local versionString = dataset.versionFromString(version)
+        if versionString then
+            features[versionString] = true
+        end
     end
 end
 
@@ -74,7 +81,7 @@ local function getChampionFeatures(datadir, features)
     end
 
     for _,champion in pairs(championInfo.data) do
-        features['c'..champion.id] = true
+        features['c'..champion.key] = true
     end
 end
 
@@ -167,11 +174,11 @@ local function verifyMatches(matchlist, features)
     )
 
     local validMatchList = tds.Vec()
+    local matchesProcessed = tds.AtomicCounter()
     for i=1,opt.threads do
         pool:addjob(
             function(first,last)
                 local validMatches = _G.tds.Vec()
-                local threadid = _G.__threadid
                 for j=first,last do
                     local matchfile = matchlist[j]
                     local data = _G.file.read(matchfile)
@@ -179,10 +186,11 @@ local function verifyMatches(matchlist, features)
                     if ok then
                         if isMatchValid(match, features) then
                             validMatches:insert(matchfile)
+                        end
 
-                            if #validMatches % opt.progress == 0 then
-                                print('Thread: '..threadid..' verified '..#validMatches..' matches')
-                            end
+                        local processed = matchesProcessed:inc() + 1
+                        if processed % opt.progress == 0 then
+                            print('Analyzed '..processed..' matches')
                         end
                     end
                 end
@@ -206,14 +214,14 @@ end
 local function validateMatches()
     local timer = torch.Timer()
 
-    print('verify matches...')
+    print('Verify matches...')
     local features = getAllFeatures(opt.datadir)
     local matchlist = tds.Vec(dir.getallfiles(opt.matchdir, '*.json'))
     local validMatches = verifyMatches(matchlist, features)
-    print('# valid matches: '..#validMatches)
+    print('#Valid matches: '..#validMatches)
 
     torch.save(path.join(opt.datadir, opt.outfile), validMatches)
-    print('done in time (seconds): ', timer:time().real)
+    print(string.format('Done in %s', utils.formatTime(timer)))
 end
 
 local function errorHandler(errmsg)

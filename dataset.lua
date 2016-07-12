@@ -30,7 +30,7 @@ local dataset = {
 -- https://developer.riotgames.com/discussion/community-discussion/show/FJT1rYsF
 function dataset.parseVersion(versionString)
     local _,_,major,minor = string.find(versionString,"^(%d+)%.(%d+)")
-    return {major=tonumber(major), minor=tonumber(minor)}
+    return major and minor and {major=tonumber(major), minor=tonumber(minor)}
 end
 
 function dataset.compareVersion(v1, v2)
@@ -39,7 +39,7 @@ end
 
 function dataset.versionFromString(versionString)
     local version = dataset.parseVersion(versionString)
-    return 'version'..version.major..'.'..version.minor
+    return version and 'version'..version.major..'.'..version.minor
 end
 
 function dataset.championId(participant)

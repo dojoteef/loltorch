@@ -1,5 +1,6 @@
 local dataset = require('dataset')
 local path = require('pl.path')
+local tds = require('tds')
 local threads = require('threads')
 local torch = require('torch')
 local utils = require('utils')
@@ -90,6 +91,7 @@ local function processMatches(matchlist, outfile, tmpfiles)
     )
 
     local fullCorpus = io.open(outfile, 'w+')
+    local participantsProcessed = tds.AtomicCounter()
     for i=1,opt.threads do
         pool:addjob(
             function(first,last)
@@ -97,7 +99,6 @@ local function processMatches(matchlist, outfile, tmpfiles)
 
                 local tmpfile = tmpfiles[threadid]
                 local corpus = io.open(tmpfile, 'w+')
-                local participantIndex = 0
                 for j=first,last do
                     local data = _G.file.read(matchlist[j])
                     local ok,match = pcall(function() return _G.cjson.decode(data) end)
@@ -107,11 +108,11 @@ local function processMatches(matchlist, outfile, tmpfiles)
                                 local sentence = getMatchData(match, participant)
                                 corpus:write(sentence)
                                 corpus:write('\n')
+                            end
 
-                                participantIndex = participantIndex + 1
-                                if participantIndex % opt.progress == 0 then
-                                    print('Thread: '..threadid..' processed '..participantIndex..' participants')
-                                end
+                            local processed = participantsProcessed:inc() + 1
+                            if processed % opt.progress == 0 then
+                                print('Processed '..processed..' participants')
                             end
                         end
                     end
@@ -142,11 +143,11 @@ end
 local function matchesToCorpus(tmpfiles)
     local timer = torch.Timer()
 
-    print('generate corpus...')
+    print('Generate corpus...')
     local matchlist = torch.load(opt.matchfile)
     processMatches(matchlist, path.join(opt.datadir, opt.outfile), tmpfiles)
 
-    print('done in time (seconds): ', timer:time().real)
+    print(string.format('Done in %s', utils.formatTime(timer)))
 end
 
 local tmpfiles = {}
