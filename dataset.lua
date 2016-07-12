@@ -226,7 +226,7 @@ function _sampler:getData(idString, targetType)
         -- must be by name
         local id = tonumber(idString)
         for _, v in pairs(data) do
-            if v.id == id then
+            if v.id == id or tonumber(v.key) == id then
                 value = v
                 break
             end
@@ -240,7 +240,7 @@ function _sampler:getChampionVector(champion)
     local championId
     for name, data in pairs(self.champion.data) do
         if name == champion then
-            championId = data.id
+            championId = data.key
             break
         end
     end
@@ -319,9 +319,9 @@ local function obeysMasteryRules(mastery, masteries, tree)
 
     for _, level in ipairs(tree) do
         local levelMasteries = {}
-        for _, treeItem in ipairs(level.masteryTreeItems) do
+        for _, treeItem in ipairs(level) do
             if treeItem ~= cjson.null then
-                levelMasteries[treeItem.masteryId] = true
+                levelMasteries[tonumber(treeItem.masteryId)] = true
             end
         end
 
@@ -347,9 +347,21 @@ local function obeysMasteryRules(mastery, masteries, tree)
     return true
 end
 
-local function getMasteryIndex(mastery)
-    for i, masteryTree in ipairs(dataset.masteryOrder) do
-        if masteryTree == mastery.masteryTree then
+local function getMasteryType(masteryId, masteryTree)
+    for masteryType, masteryList in pairs(masteryTree) do
+        for _, masteryGroup in ipairs(masteryList) do
+            for _, mastery in ipairs(masteryGroup) do
+                if mastery ~= cjson.null and tonumber(mastery.masteryId) == masteryId then
+                    return masteryType
+                end
+            end
+        end
+    end
+end
+
+local function getMasteryIndex(mastery, masteryTree)
+    for i, masteryType in ipairs(dataset.masteryOrder) do
+        if masteryType == getMasteryType(mastery.id, masteryTree) then
             return i
         end
     end
@@ -357,8 +369,8 @@ end
 
 local function getMasteryLevel(mastery, masteryTree)
     for i, level in ipairs(masteryTree) do
-        for _, treeItem in ipairs(level.masteryTreeItems) do
-            if treeItem ~= cjson.null and treeItem.masteryId == mastery.id then
+        for _, treeItem in ipairs(level) do
+            if treeItem ~= cjson.null and tonumber(treeItem.masteryId) == mastery.id then
                 return i
             end
         end
@@ -368,22 +380,24 @@ end
 function _sampler:filterMasteries(masteryId, list)
     local masteries = {}
     local mastery = self:getData(masteryId, 'mastery')
-    local masteryIndex = getMasteryIndex(mastery)
+    local masteryIndex = getMasteryIndex(mastery, self.mastery.tree)
     for _, data in ipairs(list) do
         if data.datatype == 'mastery' then
             local otherMastery = data.data
-            local masteryTree = masteries[otherMastery.masteryTree] or {}
+            local otherMasteryType = getMasteryType(otherMastery.id, self.mastery.tree)
+            local masteryTree = masteries[otherMasteryType] or {}
             table.insert(masteryTree, otherMastery)
             table.insert(masteries, otherMastery)
 
-            masteries[otherMastery.masteryTree] = masteryTree
+            masteries[otherMasteryType] = masteryTree
         end
     end
 
-    local masteryTree = self.mastery.tree[mastery.masteryTree]
+    local masteryType = getMasteryType(mastery.id, self.mastery.tree)
+    local masteryTree = self.mastery.tree[masteryType]
     if #masteries > 0 then
         local lastMastery = masteries[#masteries]
-        local lastMasteryIndex = getMasteryIndex(lastMastery)
+        local lastMasteryIndex = getMasteryIndex(lastMastery, self.mastery.tree)
         if masteryIndex < lastMasteryIndex then
             return true
         end
@@ -393,7 +407,7 @@ function _sampler:filterMasteries(masteryId, list)
         end
     end
 
-    if not obeysMasteryRules(mastery, masteries[mastery.masteryTree] or {}, masteryTree) then
+    if not obeysMasteryRules(mastery, masteries[masteryType] or {}, masteryTree) then
         return true
     end
 
