@@ -1,12 +1,20 @@
 #!/bin/bash
-baseurl="https://ddragon.leagueoflegends.com"
-curl $baseurl/api/versions.json 2>/dev/null > dataset/versions.json
+if [ $outdir == "" ]
+then
+    outdir=dataset
+fi
 
-version=$(curl https://ddragon.leagueoflegends.com/realms/na.json 2>/dev/null | sed 's/.*"v"\s*:\s*"\([^"]*\)".*/\1/')
+baseurl="https://ddragon.leagueoflegends.com"
+curl $baseurl/api/versions.json 2>/dev/null > $outdir/versions.json
+
+if [ $version == "" ]
+then
+    version=$(curl https://ddragon.leagueoflegends.com/realms/na.json 2>/dev/null | sed 's/.*"v"\s*:\s*"\([^"]*\)".*/\1/')
+fi
 
 cdnurl="$baseurl/cdn/$version/data/en_US"
-curl $cdnurl/champion.json 2>/dev/null > dataset/champions.json
-curl $cdnurl/mastery.json 2>/dev/null > dataset/masteries.json
-curl $cdnurl/rune.json 2>/dev/null > dataset/runes.json
-curl $cdnurl/item.json 2>/dev/null > dataset/items.json
-curl $cdnurl/summoner.json 2>/dev/null > dataset/spells.json
+curl $cdnurl/champion.json 2>/dev/null > $outdir/champions.json
+curl $cdnurl/mastery.json 2>/dev/null > $outdir/masteries.json
+curl $cdnurl/rune.json 2>/dev/null > $outdir/runes.json
+curl $cdnurl/item.json 2>/dev/null > $outdir/items.json
+curl $cdnurl/summoner.json 2>/dev/null > $outdir/spells.json

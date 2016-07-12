@@ -44,7 +44,7 @@ This project depends on:
 1. [Install Torch](http://torch.ch/docs/getting-started.html).
 2. Install the following additional Lua libraries:
 
-```sh
+```bash
 luarocks install lualol
 luarocks install nn
 luarocks install nngraph
@@ -61,17 +61,25 @@ an error about not having [OpenSSL](https://www.openssl.org) installed.
 <a name="try"/>
 ##Trying LoLTorch out
 Once you have LoLTorch installed the quickest way to get some predictions is to
-use one of the pretrained models. Simply type
+use one of the pretrained models. Note that the pretrained models were trained
+on data from versions 6.11, 6.12, and 6.13. So first you need to get the static
+data for version 6.13:
 
-```sh
-./bin/sample gated768
+```bash
+outdir=pretrained version=6.13.1 ./bin/getstaticdata
+```
+
+Now that you have the static data downloaded you can use the following command
+
+```bash
+modeldir=pretrained ./bin/sample gated768 -datadir pretrained
 ```
 
 to get a preset list of examples comparing various roles for a subset of
 champions. Using the following command
 
-```sh
-./bin/sample_odd gated768
+```bash
+modeldir=pretrained ./bin/sample_odd gated768 -datadir pretrained
 ```
 
 will give some examples of weird combinations such as having Blitzcrank as an
@@ -79,7 +87,7 @@ adc.
 
 For trying out your own combinations simply use the command:
 
-```sh
+```bash
 th sample.lua -help
 ```
 
@@ -90,7 +98,7 @@ to see a list of options.
 In order to train your own network on new data you need to first get the match
 data and process it:
 
-```sh
+```bash
 ./bin/getstaticdata
 ./bin/getallmatches
 ./bin/processmatches
@@ -99,7 +107,7 @@ data and process it:
 Then simply train a model using the data. Use the following command to get a
 list of training options (and their defaults):
 
-```sh
+```bash
 ./bin/trainbuild
 ```
 
@@ -107,7 +115,7 @@ Note that when actually training, the first parameter to the `trainbuild` script
 needs to be the model type, so the minimal command to train the `gated384` model
 would be:
 
-```sh
+```bash
 ./bin/trainbuild gated384
 ```
 

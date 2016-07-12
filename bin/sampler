@@ -6,7 +6,11 @@ then
     exit
 fi
 
-modeldir=models
+if [ $modeldir == "" ]
+then
+    modeldir=models
+fi
+
 modelname=$modeltype.t7
 model=$modeldir/$modelname
 if [ ! -r $model ]

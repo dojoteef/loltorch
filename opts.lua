@@ -12,7 +12,7 @@ function _opts.parse(arg)
     -- Training options
     -----------------------------------------------------------
     cmd:option('-batchsize',128,'how many inputs per batch')
-    cmd:option('-epochs',200,'max number of to process')
+    cmd:option('-epochs',200,'max number of epochs to process')
     cmd:option('-patience',5,'how many epochs after finding minimum loss before moving to next training regime')
     cmd:option('-strategy',3,'how aggressive the learning rate, momentum, etc should be (value 1-3)')
     cmd:option('-margin',.25,'what margin to use for the cosine criterion')
@@ -22,7 +22,7 @@ function _opts.parse(arg)
     -----------------------------------------------------------
     -- Data options
     -----------------------------------------------------------
-    cmd:option('-testratio',.1,'how many epochs to process')
+    cmd:option('-testratio',.1,'how much data to reserve for testing the model')
     cmd:option('-datadir','dataset','the directory where the dataset is located')
     cmd:option('-snapshots','snapshots','where to save snapshots while training to allow for continuing')
     cmd:option('-seed',torch.initialSeed(),'seed used for shuffling data')
@@ -30,7 +30,7 @@ function _opts.parse(arg)
     -- Model options
     -----------------------------------------------------------
     cmd:option('-model','model.t7','where to name the final model file')
-    cmd:option('-modeltype','mlp','what type of model to create')
+    cmd:option('-modeltype','mlp192','what type of model to create')
     cmd:option('-models','models','where to store the fully trained models')
     cmd:option('-continue','','where to load a previous model from to continue training')
     -----------------------------------------------------------
