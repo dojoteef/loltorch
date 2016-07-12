@@ -1,5 +1,16 @@
 #LoLTorch - A build optimizer based on Torch7 neural networks
 
+  * [What does LoLTorch do?](#intro)
+  * [Requirements](#requirements)
+  * [Installation](#install)
+  * [Trying LoLTorch out](#try)
+  * [Training your own networks](#train)
+  * [How does LoLTorch work?](#approach)
+  * [Neural Network Details](#details)
+  * [Caveats](#caveats)
+  * [Disclosure](#disclosure)
+
+<a name="intro"/>
 ##What does LoLTorch do?
 
 LoLTorch pulls match data from the [League of Legends
@@ -13,6 +24,7 @@ optimal build might look like. For example, if you wanted to know what a support
 character like Blitzcrank might need in order to be an effective jungler, this
 project aims to do just that.
 
+<a name="requirements"/>
 ##Requirements
 
 This project depends on:
@@ -26,18 +38,19 @@ This project depends on:
  * [tds](https://github.com/torch/tds)
  * [threads](https://github.com/torch/threads)
 
+<a name="install"/>
 ###Installation
 
 1. [Install Torch](http://torch.ch/docs/getting-started.html).
 2. Install the following additional Lua libraries:
 
-    ```sh
-    luarocks install lualol
-    luarocks install nn
-    luarocks install nngraph
-    luarocks install tds
-    luarocks install threads
-    ```
+```sh
+luarocks install lualol
+luarocks install nn
+luarocks install nngraph
+luarocks install tds
+luarocks install threads
+```
 
 Note if you have any trouble are trying to install LoLTorch on OSX from within
 torch's LuaRocks installation you may need to use following command if you get
@@ -45,57 +58,60 @@ an error about not having [OpenSSL](https://www.openssl.org) installed.
 
     > luarocks install lualol OPENSSL_DIR=/usr/local/opt/openssl/
 
+<a name="try"/>
 ##Trying LoLTorch out
 Once you have LoLTorch installed the quickest way to get some predictions is to
 use one of the pretrained models. Simply type
 
-    ```sh
-    ./bin/sample gated768
-    ```
+```sh
+./bin/sample gated768
+```
 
 to get a preset list of examples comparing various roles for a subset of
 champions. Using the following command
 
-    ```sh
-    ./bin/sample_odd gated768
-    ```
+```sh
+./bin/sample_odd gated768
+```
 
 will give some examples of weird combinations such as having Blitzcrank as an
 adc.
 
 For trying out your own combinations simply use the command:
 
-    ```sh
-    th sample.lua -help
-    ```
+```sh
+th sample.lua -help
+```
 
 to see a list of options.
 
+<a name="train"/>
 ###Training your own networks
 In order to train your own network on new data you need to first get the match
 data and process it:
 
-    ```sh
-    ./bin/getstaticdata
-    ./bin/getallmatches
-    ./bin/processmatches
-    ```
+```sh
+./bin/getstaticdata
+./bin/getallmatches
+./bin/processmatches
+```
 
 Then simply train a model using the data. Use the following command to get a
 list of training options (and their defaults):
 
-    ```sh
-    ./bin/trainbuild
-    ```
+```sh
+./bin/trainbuild
+```
 
 Note that when actually training, the first parameter to the `trainbuild` script
 needs to be the model type, so the minimal command to train the `gated384` model
 would be:
 
-    ```sh
-    ./bin/trainbuild gated384
-    ```
+```sh
+./bin/trainbuild gated384
+```
 
+<a name="approach"/>
 ##How does LoLTorch work?
 
 LoLTorch first pulls all the ranked match data from the League of Legends API
@@ -115,6 +131,7 @@ ones are closest in similarity. This similarity value is then able to be output
 confident the neural network is in predicting that particular feature.
 
 
+<a name="details"/>
 ###Neural Network Details
 A number of architectures were tried in regards to what would be an effective
 neural network. The final neural network models that were chosen for inclusion
@@ -128,6 +145,7 @@ cross\_validation.txt file, showing the input parameters to the training and
 cross validation scores of each network tested.
 
 
+<a name="caveats"/>
 ###Caveats
 Since I only have a 2013 model Macbook Pro with a Core i7 I only implemented the
 neural network using the threading library in Torch7. While the laptop I have
@@ -150,6 +168,7 @@ be much slower. For that reason word2vec with a text corpus was chosen as a
 close analogue to generating vectors based on the input features using Torch7.
 
 
+<a name="disclosure"/>
 ##Disclosure
 
 LoLTorch isn't endorsed by Riot Games and doesn't reflect the views or opinions
