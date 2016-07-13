@@ -23,6 +23,7 @@ North American region.
 <a name="jhin_adc"/>
 ### Jhin ADC
 
+```
 Spell: Flash (Confidence: 1.00)
 Spell: Heal (Confidence: 1.00)
 Item: Mercurial Scimitar (Confidence: 0.85)
@@ -92,10 +93,12 @@ Mastery: Battering Blows (Confidence: 0.95)
 Mastery: Battering Blows (Confidence: 0.95)
 Mastery: Battering Blows (Confidence: 0.95)
 Mastery: Deathfire Touch (Confidence: 0.95)
+```
 
 <a name="evelynn"/>
 ### Evelynn Jungler
 
+```
 Spell: Ghost (Confidence: 0.85)
 Spell: Smite (Confidence: 0.64)
 Item: Enchantment: Bloodrazor (Confidence: 0.76)
@@ -165,6 +168,7 @@ Mastery: Swiftness (Confidence: 0.77)
 Mastery: Swiftness (Confidence: 0.76)
 Mastery: Swiftness (Confidence: 0.76)
 Mastery: Strength of the Ages (Confidence: 0.76)
+```
 
 <a name="odd"/>
 ## Odd Builds
@@ -172,6 +176,7 @@ Mastery: Strength of the Ages (Confidence: 0.76)
 <a name="blitzj"/>
 ### Blitzcrank Jungler
 
+```
 Spell: Ghost (Confidence: 0.93)
 Spell: Smite (Confidence: 0.98)
 Item: Enchantment: Runic Echoes (Confidence: 0.78)
@@ -241,10 +246,12 @@ Mastery: Swiftness (Confidence: 0.91)
 Mastery: Swiftness (Confidence: 0.92)
 Mastery: Swiftness (Confidence: 0.92)
 Mastery: Strength of the Ages (Confidence: 0.95)
+```
 
 <a name="braum"/>
 ### Braum Mid
 
+```
 Spell: Flash (Confidence: 0.95)
 Spell: Ignite (Confidence: 0.91)
 Item: Doran's Ring (Confidence: 0.85)
@@ -314,3 +321,4 @@ Mastery: Natural Talent (Confidence: 0.86)
 Mastery: Natural Talent (Confidence: 0.86)
 Mastery: Natural Talent (Confidence: 0.86)
 Mastery: Oppressor (Confidence: 0.89)
+```
