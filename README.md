@@ -1,19 +1,19 @@
-#LoLTorch - A build optimizer based on Torch7 neural networks
+#loltorch - A build optimizer based on Torch7 neural networks
 
-  * [What does LoLTorch do?](#intro)
+  * [What does loltorch do?](#intro)
   * [Requirements](#requirements)
   * [Installation](#install)
-  * [Trying LoLTorch out](#try)
+  * [Trying loltorch out](#try)
   * [Training your own networks](#train)
-  * [How does LoLTorch work?](#approach)
+  * [How does loltorch work?](#approach)
   * [Neural Network Details](#details)
   * [Caveats](#caveats)
   * [Disclosure](#disclosure)
 
 <a name="intro"/>
-##What does LoLTorch do?
+##What does loltorch do?
 
-LoLTorch pulls match data from the [League of Legends
+loltorch pulls match data from the [League of Legends
 API](http://developer.leagueoflegends.com) and runs the data through a neural
 network which tries to make the Masteries, Runes, Spells, and Items look more
 like what the winning team used and less like the losing team. This predicts
@@ -52,15 +52,15 @@ luarocks install tds
 luarocks install threads
 ```
 
-Note if you have any trouble are trying to install LoLTorch on OSX from within
+Note if you have any trouble are trying to install loltorch on OSX from within
 torch's LuaRocks installation you may need to use following command if you get
 an error about not having [OpenSSL](https://www.openssl.org) installed.
 
     > luarocks install lualol OPENSSL_DIR=/usr/local/opt/openssl/
 
 <a name="try"/>
-##Trying LoLTorch out
-Once you have LoLTorch installed the quickest way to get some predictions is to
+##Trying loltorch out
+Once you have loltorch installed the quickest way to get some predictions is to
 use one of the pretrained models. Note that the pretrained models were trained
 on data from versions 6.11, 6.12, and 6.13. So first you need to get the static
 data for version 6.13:
@@ -120,9 +120,9 @@ would be:
 ```
 
 <a name="approach"/>
-##How does LoLTorch work?
+##How does loltorch work?
 
-LoLTorch first pulls all the ranked match data from the League of Legends API
+loltorch first pulls all the ranked match data from the League of Legends API
 for the Master and Challenger leagues then takes all the features of the match
 (Champion, Role, Runes, Spells, etc) for each participant and puts them into
 a corpus.txt which is then run through word2vec in order to generate vectors
@@ -179,7 +179,7 @@ close analogue to generating vectors based on the input features using Torch7.
 <a name="disclosure"/>
 ##Disclosure
 
-LoLTorch isn't endorsed by Riot Games and doesn't reflect the views or opinions
+loltorch isn't endorsed by Riot Games and doesn't reflect the views or opinions
 of Riot Games or anyone officially involved in producing or managing League of
 Legends. League of Legends and Riot Games are trademarks or registered
 trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.
