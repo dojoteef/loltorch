@@ -182,8 +182,8 @@ local function getGated768Model(dataLoader)
     }
 
     local gates = {
-        {count=48,transfer={func=nn.ReLU,params={true}}},
         {count=96,transfer={func=nn.ReLU,params={true}}},
+        {count=192,transfer={func=nn.ReLU,params={true}}},
         {count=targetCount,transfer={func=nn.Tanh}}
     }
 

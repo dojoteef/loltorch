@@ -72,14 +72,14 @@ outdir=pretrained version=6.13.1 ./bin/getstaticdata
 Now that you have the static data downloaded you can use the following command
 
 ```bash
-modeldir=pretrained ./bin/sample gated768 -datadir pretrained
+modeldir=pretrained ./bin/sample mlp384 -datadir pretrained
 ```
 
 to get a preset list of examples comparing various roles for a subset of
 champions. Using the following command
 
 ```bash
-modeldir=pretrained ./bin/sample_odd gated768 -datadir pretrained
+modeldir=pretrained ./bin/sample_odd mlp384 -datadir pretrained
 ```
 
 will give some examples of weird combinations such as having Blitzcrank as an
@@ -149,7 +149,7 @@ uses a separate MLP (multi-layer perceptron) per input feature and then combines
 them based on a separate neural network which is the 'gate'.
 
 The results of the final k-fold cross validation are listed in the
-cross\_validation.txt file, showing the input parameters to the training and
+pretrained/README.md file, showing the parameters used for training and
 cross validation scores of each network tested.
 
 

@@ -1,6 +1,7 @@
 local dataset = require('dataset')
 local nngraph = require('nngraph')
 local path = require('pl.path')
+local stringx = require('pl.stringx')
 local torch = require('torch')
 require('nn')
 
@@ -15,9 +16,9 @@ cmd:option('-debug',false,'whether to set debug mode')
 cmd:option('-role','DUO_SUPPORT','what role to predict')
 cmd:option('-lane','BOT','what lane to predict')
 cmd:option('-champion','Janna','what champion to predict')
-cmd:option('-version','6.11','what version to predict')
+cmd:option('-version','6.13','what version to predict')
 cmd:option('-region','na','what region to predict')
-cmd:option('-tier','CHALLENGER','what tier to predict')
+cmd:option('-tier','MASTER','what tier to predict')
 cmd:option('-threshold',0,'the minimum confidence threshold for output')
 cmd:option('-format','full','what format to use for output: "full" or "compact" (compact does not include confidence)')
 cmd:text()
@@ -59,9 +60,9 @@ print('champion: '..opt.champion..', role: '..opt.role..', lane: '..opt.lane)
 local prediction = sampler:sample(model, input)
 for _, row in ipairs(prediction) do
     if row.confidence > opt.threshold then
-        local output = 'datatype: '..row.datatype..', name: '..row.data.name
+        local output = string.format('%s: %s', stringx.title(row.datatype), row.data.name)
         if format == 'full' then
-            output = output..', confidence: '..row.confidence
+            output = string.format('%s (Confidence: %.2f)', output, row.confidence)
         end
 
         print(output)

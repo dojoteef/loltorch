@@ -1,7 +1,9 @@
 .DS_Store
 .cache/
 .keys/
+models/
 dataset/
 matches/
 snapshots/
 bin/word2vec
+pretrained/*.json

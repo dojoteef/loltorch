@@ -48,4 +48,4 @@ sample "$build2"
 sample2="$SAMPLE"
 
 echo "$sample1"
-diff <(echo "$sample1" | cut -d',' -f 1-2) <(echo "$sample2" | cut -d',' -f 1-2)
+diff <(echo "$sample1" | cut -d'(' -f 1) <(echo "$sample2" | cut -d'(' -f 1)
