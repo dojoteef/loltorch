@@ -1,0 +1,17 @@
+#!/bin/bash
+trap 'kill $(jobs -p)' EXIT
+
+region="$1"
+mkdir -p "matches/""${region}"
+
+shift
+params="$*"
+
+declare -a tiers=('challenger' 'master')
+for tier in "${tiers[@]}"
+do
+    th getmatches.lua -region "${region}" -outdir matches -tier "${tier}" $params &
+    wait
+done
+
+trap '' EXIT
