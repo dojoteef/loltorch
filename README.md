@@ -1,4 +1,4 @@
-#loltorch - A build optimizer based on Torch7 neural networks
+# loltorch - A build optimizer based on Torch7 neural networks
 
   * [What does loltorch do?](#intro)
   * [Requirements](#requirements)
@@ -11,7 +11,7 @@
   * [Disclosure](#disclosure)
 
 <a name="intro"/>
-##What does loltorch do?
+## What does loltorch do?
 
 loltorch pulls match data from the [League of Legends
 API](http://developer.leagueoflegends.com) and runs the data through a neural
@@ -25,7 +25,7 @@ character like Blitzcrank might need in order to be an effective jungler, this
 project aims to do just that.
 
 <a name="requirements"/>
-##Requirements
+## Requirements
 
 This project depends on:
  * [Penlight](https://github.com/stevedonovan/Penlight)
@@ -39,7 +39,7 @@ This project depends on:
  * [threads](https://github.com/torch/threads)
 
 <a name="install"/>
-###Installation
+### Installation
 
 1. [Install Torch](http://torch.ch/docs/getting-started.html).
 2. Install the following additional Lua libraries:
@@ -59,7 +59,7 @@ an error about not having [OpenSSL](https://www.openssl.org) installed.
     > luarocks install lualol OPENSSL_DIR=/usr/local/opt/openssl/
 
 <a name="try"/>
-##Trying loltorch out
+## Trying loltorch out
 Once you have loltorch installed the quickest way to get some predictions is to
 use one of the pretrained models. Note that the pretrained models were trained
 on data from versions 6.11, 6.12, and 6.13. So first you need to get the static
@@ -94,7 +94,7 @@ th sample.lua -help
 to see a list of options.
 
 <a name="train"/>
-###Training your own networks
+### Training your own networks
 In order to train your own network on new data you need to first get the match
 data and process it:
 
@@ -120,7 +120,7 @@ would be:
 ```
 
 <a name="approach"/>
-##How does loltorch work?
+## How does loltorch work?
 
 loltorch first pulls all the ranked match data from the League of Legends API
 for the Master and Challenger leagues then takes all the features of the match
@@ -140,7 +140,7 @@ confident the neural network is in predicting that particular feature.
 
 
 <a name="details"/>
-###Neural Network Details
+### Neural Network Details
 A number of architectures were tried in regards to what would be an effective
 neural network. The final neural network models that were chosen for inclusion
 are visible in the 'models.lua' file. Through the use of cross validation the
@@ -154,7 +154,7 @@ cross validation scores of each network tested.
 
 
 <a name="caveats"/>
-###Caveats
+### Caveats
 Since I only have a 2013 model Macbook Pro with a Core i7 I only implemented the
 neural network using the threading library in Torch7. While the laptop I have
 has a dedicated GPU, in initial testing it turned out to be much slower than
@@ -177,7 +177,7 @@ close analogue to generating vectors based on the input features using Torch7.
 
 
 <a name="disclosure"/>
-##Disclosure
+## Disclosure
 
 loltorch isn't endorsed by Riot Games and doesn't reflect the views or opinions
 of Riot Games or anyone officially involved in producing or managing League of
